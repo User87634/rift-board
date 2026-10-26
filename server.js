@@ -26,6 +26,7 @@ const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 // ================= 谷歌表格初始化 =================
 let sheetsClient = null;
+console.log('[启动检查] KEY存在?', !!GOOGLE_SERVICE_ACCOUNT_KEY, 'ID存在?', !!GOOGLE_SHEET_ID);
 if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_SHEET_ID) {
   try {
     const keyJson = JSON.parse(GOOGLE_SERVICE_ACCOUNT_KEY.replace(/\\n/g, '\n'));
