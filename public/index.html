@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>裂隙棋盘 联机版 · v7</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#f0f4f8;color:#1e293b;font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;min-height:100vh}
+  .page{width:100%;max-width:1400px;padding:16px}
+  #lobby{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:90vh}
+
+  /* ★ 新增的标题外框 */
+  .header-box{
+    background:#fff;
+    border-radius:12px;
+    padding:24px 28px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.06);
+    width:100%;
+    max-width:420px; /* 和下面输入卡片一样宽 */
+    text-align:center;
+    margin-bottom:16px; /* 和下面的卡片留点空隙 */
+  }
+
+  .header-box h1{font-size:36px;margin:0 0 8px;color:#0f172a}
+  .header-box .sub{color:#64748b;margin-bottom:8px}
+  .header-box .disclaimer{font-size:12px;color:#94a3b8;margin:0;text-align:center;line-height:1.5}
+  .card{background:#fff;border-radius:12px;padding:24px 28px;box-shadow:0 4px 16px rgba(0,0,0,0.06);width:100%;max-width:420px}
+  .field{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  .field label{font-size:13px;color:#475569;font-weight:600}
+  .field input{padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;outline:none}
+  .field input:focus{border-color:#3b82f6}
+  .divider{text-align:center;color:#94a3b8;font-size:13px;margin:10px 0;position:relative}
+  .divider::before,.divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:#e2e8f0}
+  .divider::before{left:0}
+  .divider::after{right:0}
+  button{padding:11px 18px;background:#3b82f6;color:#fff;border:0;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;width:100%}
+  button:hover{background:#2563eb}
+  button:disabled{background:#94a3b8;cursor:not-allowed}
+  .mode-row{display:flex;gap:8px;margin-bottom:14px}
+  .mode-btn{flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;color:#475569;cursor:pointer;text-align:center;transition:all 0.15s;font-size:13px;font-weight:600}
+  .mode-btn:hover{border-color:#93c5fd}
+  .mode-btn.active{border-color:#3b82f6;background:#eff6ff;color:#1e40af}
+  .mode-btn .mode-name{display:block;font-size:14px;margin-bottom:2px;font-weight:700}
+  .mode-btn .mode-desc{font-size:11px;font-weight:400;color:#64748b}
+  #errorMsg{color:#dc2626;font-size:13px;text-align:center;margin-top:10px;min-height:18px}
+
+  /* 房间列表 */
+  .room-list-panel{width:100%;max-width:420px;margin-top:16px;background:#fff;border-radius:12px;padding:16px 20px;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+  .room-list-panel h3{margin:0 0 10px;font-size:14px;color:#0f172a;display:flex;justify-content:space-between;align-items:center}
+  .room-list-panel h3 span{font-size:12px;color:#94a3b8;font-weight:normal}
+  .room-list-body{max-height:240px;overflow-y:auto}
+  .room-list-empty{color:#94a3b8;font-size:12px;text-align:center;padding:12px 0}
+  .room-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:8px;margin-bottom:6px;cursor:pointer;transition:all 0.15s;border:1px solid #e2e8f0}
+  .room-row:hover{background:#eff6ff;border-color:#93c5fd}
+  .room-row .rr-code{font-weight:700;font-size:16px;letter-spacing:2px;color:#2563eb}
+  .room-row .rr-mode{padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600;background:#dbeafe;color:#1e40af}
+  .room-row .rr-mode.fog{background:#ede9fe;color:#6d28d9}
+  .room-row .rr-count{margin-left:auto;font-size:12px;color:#64748b}
+  .room-row .rr-ai{font-size:11px;color:#94a3b8}
+
+  #gamePage{display:none}
+  .game-header{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:10px 18px;border-radius:8px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.05);flex-wrap:wrap;gap:8px}
+  .header-main{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .header-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .room-code{font-size:18px;font-weight:700;letter-spacing:2px;color:#0f172a}
+  .room-code b{color:#2563eb}
+  .mode-tag{padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#dbeafe;color:#1e40af}
+  .mode-tag.fog{background:#ede9fe;color:#6d28d9}
+  .mute-btn{width:auto;padding:4px 12px;font-size:14px;background:#fff;color:#475569;border:1px solid #cbd5e1}
+  .player-count{color:#64748b;font-size:13px}
+  .collapse-status{font-size:13px;font-weight:600;color:#dc2626}
+  .lock-status{font-size:12px;color:#94a3b8}
+  .game-layout{display:flex;gap:12px;align-items:flex-start}
+  .col-left{width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;max-height:760px;overflow-y:auto}
+  .col-board{flex-shrink:0}
+  .col-right{flex:1;min-width:260px;max-width:340px;max-height:760px;overflow-y:auto}
+  #logPanel{background:#fff;border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);display:flex;flex-direction:column;min-height:120px}
+  #logPanel h3{margin:0 0 8px;font-size:14px;color:#0f172a;flex-shrink:0}
+  #logList{flex:1;overflow-y:auto;font-size:11px;color:#475569;line-height:1.5;padding-right:4px;max-height:200px}
+  #logList::-webkit-scrollbar{width:4px}
+  #logList::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}
+  #logList .log-item{padding:3px 0;border-bottom:1px solid #f1f5f9}
+  #board{background:#fff;border:2px solid #cbd5e1;border-radius:8px;display:block;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+  .panel{background:#fff;border-radius:8px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+  .panel h3{margin:0 0 8px;font-size:14px;color:#0f172a}
+  .player-item{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:13px}
+  .player-item .player-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  .player-item .hp{color:#ef4444;font-size:12px;margin-left:auto;letter-spacing:1px}
+  .player-item .sh{color:#a3a3a3;font-size:11px;margin-left:4px}
+  .player-item.me{font-weight:600;color:#2563eb}
+  .player-item.dead{opacity:0.4}
+  .player-item .hidden-tag{font-size:10px;color:#94a3b8;margin-left:4px}
+  .ai-tag{display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;background:#e0e7ff;color:#4338ca;margin-left:4px;line-height:1.2}
+  .hint{font-size:12px;color:#64748b;line-height:1.5}
+  .cooldown-bar{height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin-top:8px}
+  .cooldown-bar>div{height:100%;background:#3b82f6;transition:width 0.1s linear}
+  .my-status{display:flex;gap:10px;margin-bottom:6px;font-size:13px;align-items:center;flex-wrap:wrap}
+  .my-status .hp-big{color:#ef4444;font-weight:700;font-size:17px;letter-spacing:1px}
+  .my-status .sh-big{color:#a3a3a3;font-size:13px}
+  .status-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .status-tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .status-tag.scan{background:#dbeafe;color:#1e40af}
+  .status-tag.vision{background:#ede9fe;color:#6d28d9}
+  .status-tag.insight{background:#cffafe;color:#0e7490}
+  .status-tag.decoy{background:#fef3c7;color:#92400e}
+  .status-tag.disoriented{background:#fee2e2;color:#dc2626}
+  .relic-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:12px;color:#6d28d9;font-weight:600}
+  .spectate-banner{background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
+  .waiting-banner{background:#ede9fe;color:#6d28d9;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
+  .item-btn{display:inline-block;padding:5px 9px;background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;cursor:pointer;margin:2px;font-size:12px;color:#1e40af;user-select:none;font-weight:600;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .item-btn:hover{background:#dbeafe}
+  .item-btn.selected{background:#3b82f6;color:#fff;border-color:#2563eb}
+  .small-item-btn{background:#fef9c3;border-color:#fde047;color:#854d0e}
+  .small-item-btn:hover{background:#fef08a}
+  .hint-box{font-size:11px;color:#7c3aed;margin-top:6px;padding:5px;background:#f5f3ff;border-radius:5px}
+  .flash-msg{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(220,38,38,0.9);color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+  .small-score-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:14px}
+  .small-score-row .me-score{color:#2563eb;font-weight:700;font-size:20px}
+  .small-score-row .opp-score{color:#dc2626;font-weight:700;font-size:20px}
+  .frag-btn{display:inline-block;padding:4px 8px;background:#fef9c3;border:1px solid #fde047;border-radius:6px;cursor:pointer;margin:2px;font-size:11px;color:#854d0e;user-select:none;font-weight:600;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .frag-btn:hover{background:#fef08a}
+  .frag-btn:disabled{opacity:0.4;cursor:not-allowed;background:#f8fafc;color:#94a3b8;border-color:#e2e8f0}
+  .blessing-card{display:block;padding:8px 10px;background:#f0f9ff;border:2px solid #7dd3fc;border-radius:8px;cursor:pointer;margin:4px 0;font-size:12px;transition:all 0.15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .blessing-card:hover{background:#e0f2fe;border-color:#3b82f6}
+  .blessing-card b{display:block;margin-bottom:2px;color:#0c4a6e}
+  #tooltip{position:fixed;background:rgba(15,23,42,0.94);color:#fff;padding:6px 10px;border-radius:6px;font-size:12px;pointer-events:none;display:none;z-index:100;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+  #gameOverOverlay{position:fixed;inset:0;background:rgba(240,244,248,0.97);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;overflow-y:auto}
+  #gameOverPanel{background:#fff;border-radius:16px;padding:24px 28px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.15);margin:auto}
+  #gameOverPanel h2{text-align:center;font-size:28px;margin:0 0 6px}
+  #gameOverPanel .winner-name{text-align:center;font-size:15px;color:#64748b;margin-bottom:20px}
+  .result-section{margin-bottom:18px}
+  .result-section h3{font-size:15px;color:#0f172a;margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #e2e8f0}
+  .rank-row{display:flex;align-items:center;padding:6px 10px;border-radius:6px;margin-bottom:3px;font-size:13px;background:#f8fafc}
+  .rank-row.me{background:#dbeafe;font-weight:600}
+  .rank-row.winner{background:#fef3c7;font-weight:600}
+  .rank-num{width:32px;font-weight:700;color:#64748b;flex-shrink:0}
+  .rank-row.winner .rank-num{color:#d97706}
+  .rank-name{flex:1;padding-left:6px}
+  .rank-stats{font-size:11px;color:#64748b;display:flex;gap:8px;flex-shrink:0}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;font-size:13px}
+  .stat-item{display:flex;justify-content:space-between;padding:5px 8px;background:#f8fafc;border-radius:5px}
+  .stat-label{color:#64748b}
+  .stat-value{font-weight:600;color:#0f172a}
+
+  @media(max-width:1000px){
+    .game-layout{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "board board"
+        "left right";
+      gap: 8px;
+    }
+    .col-board{grid-area:board; width:100%; flex-shrink:1}
+    .col-board #board{width:100%; height:auto; max-width:100%}
+    .col-left{grid-area:left; width:auto; min-width:0; max-height:60vh; overflow-y:auto}
+    .col-right{grid-area:right; width:auto; min-width:0; max-width:none; max-height:60vh; overflow-y:auto}
+    .stat-grid{grid-template-columns:1fr}
+    #logList{max-height:150px}
+  }
+
+  @media(max-width:600px){
+    .page{padding:8px}
+    .game-header{flex-wrap:wrap;gap:6px;padding:8px 10px}
+    .room-code{font-size:14px;letter-spacing:1px}
+    .mode-tag{font-size:11px;padding:2px 8px}
+    .mute-btn{padding:3px 8px;font-size:12px}
+    .collapse-status{font-size:12px}
+    .player-count{font-size:12px}
+    .lock-status{font-size:11px}
+    .header-status{gap:8px}
+
+    .panel{padding:8px;margin-bottom:6px}
+    .panel h3{font-size:12px;margin-bottom:5px}
+    .player-item{font-size:11px;padding:3px 0}
+    .my-status{font-size:12px;gap:6px}
+    .my-status .hp-big{font-size:14px}
+    .hint{font-size:10px;line-height:1.4}
+
+    .item-btn{padding:7px 10px;font-size:12px;margin:2px}
+    .frag-btn{padding:6px 8px;font-size:11px;margin:2px}
+
+    #logPanel{padding:8px;min-height:80px}
+    #logPanel h3{font-size:11px;margin-bottom:4px}
+    #logList{font-size:10px;line-height:1.3;max-height:100px}
+
+    .spectate-banner,.waiting-banner{padding:6px 10px;font-size:11px;margin-bottom:6px}
+
+    #gameOverPanel{padding:16px;margin:8px;max-width:calc(100vw - 16px);max-height:calc(100vh - 32px)}
+    #gameOverPanel h2{font-size:22px}
+    .rank-row{font-size:12px;padding:5px 8px}
+    .rank-stats{font-size:10px;gap:6px}
+    .stat-grid{grid-template-columns:1fr}
+    .stat-item{font-size:12px;padding:4px 8px}
+
+    .card{padding:20px 18px;max-width:calc(100vw - 20px)}
+    .header-box{max-width:calc(100vw - 20px);padding:20px 18px;}
+    .room-list-panel{max-width:calc(100vw - 20px);padding:12px 14px}
+    #lobby h1{font-size:26px}
+    #lobby .sub{font-size:12px;margin-bottom:20px}
+    .mode-btn{padding:10px 8px;font-size:12px}
+    .mode-btn .mode-name{font-size:13px}
+    .mode-btn .mode-desc{font-size:10px}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div id="lobby">
+    <div class="header-box">
+      <h1>裂隙棋盘</h1>
+      <div class="sub">局域网联机 · v7</div>
+      <div class="disclaimer">个人非商业项目 · 完全免费 · 不收取任何费用</div>
+    </div>
+    <div class="card">
+      <div class="field">
+        <label>你的名字（可选）</label>
+        <input id="nameInput" placeholder="留空则自动分配" maxlength="8">
+      </div>
+      <div class="field">
+        <label>游戏模式</label>
+        <div class="mode-row">
+          <button class="mode-btn active" data-mode="CLASSIC" id="modeClassic">
+            <span class="mode-name">经典模式</span>
+            <span class="mode-desc">全图 + 迷雾（桌面推荐）</span>
+          </button>
+          <button class="mode-btn" data-mode="FOG" id="modeFog">
+            <span class="mode-name">迷雾模式</span>
+            <span class="mode-desc">7×7 视窗（手机推荐）</span>
+          </button>
+        </div>
+      </div>
+      <button id="createBtn">创建房间</button>
+      <div class="divider">或</div>
+      <div class="field">
+        <label>房间码</label>
+        <input id="codeInput" placeholder="4 位字母或数字" maxlength="4" style="text-transform:uppercase">
+      </div>
+      <button id="joinBtn">加入房间</button>
+      <div id="errorMsg"></div>
+    </div>
+
+    <div class="room-list-panel">
+      <h3>可加入的房间 <span id="roomListCount"></span></h3>
+      <div class="room-list-body" id="roomListBody">
+        <div class="room-list-empty">暂无房间</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gamePage">
+    <div class="game-header">
+      <div class="header-main">
+        <div class="room-code">房间：<b id="roomCode"></b></div>
+        <div class="mode-tag" id="modeTag">经典</div>
+        <button id="muteBtn" class="mute-btn">🔔</button>
+      </div>
+      <div class="header-status">
+        <div class="collapse-status" id="collapseStatus"></div>
+        <div class="player-count" id="playerCount"></div>
+        <div class="lock-status" id="lockStatus"></div>
+      </div>
+    </div>
+    <div id="spectateBanner" class="spectate-banner" style="display:none">你已淘汰，观战中</div>
+    <div id="waitingBanner" class="waiting-banner" style="display:none">正在等待裂隙匹配...</div>
+    <div class="game-layout">
+      <div class="col-left">
+        <div id="itemsPanel" class="panel">
+          <h3>道具 <span style="color:#64748b;font-size:12px;font-weight:normal">（<span id="itemCount">0</span>/3）</span></h3>
+          <div id="itemList"><span style="color:#94a3b8;font-size:12px">空</span></div>
+          <div class="hint" id="itemHint" style="margin-top:6px;display:none"></div>
+          <div id="relicRow" style="margin-top:8px;display:none">
+            <span style="font-size:12px;color:#64748b">信物：</span>
+            <span class="relic-badge" id="relicBadge"></span>
+          </div>
+        </div>
+        <div id="logPanel">
+          <h3>日志</h3>
+          <div id="logList"></div>
+        </div>
+        <div id="playerPanel" class="panel">
+          <h3>玩家</h3>
+          <div id="playerList"></div>
+        </div>
+      </div>
+      <div class="col-board" id="boardWrap">
+        <canvas id="board" width="720" height="720"></canvas>
+      </div>
+      <div class="col-right">
+        <div id="bigSidePanel">
+          <div id="blessingPanel" class="panel" style="display:none;border:2px solid #7dd3fc">
+            <h3>🎁 选择祝福</h3>
+            <div id="blessingList"></div>
+          </div>
+          <div id="relicPanel" class="panel" style="display:none;border:2px solid #c4b5fd">
+            <h3>📦 选择信物带回</h3>
+            <div id="relicList"></div>
+          </div>
+          <div class="panel">
+            <h3>你的状态</h3>
+            <div class="my-status">
+              <span>生命</span><span class="hp-big" id="myHp">♥♥♥</span>
+              <span class="sh-big" id="myShields"></span>
+              <span class="sh-big" id="myFragments" style="color:#d97706"></span>
+            </div>
+            <div class="status-tags" id="statusTags"></div>
+            <div class="cooldown-bar"><div id="cooldownBar" style="width:100%"></div></div>
+            <div class="hint" id="cooldownText" style="margin-top:6px">可移动</div>
+          </div>
+          <div class="panel">
+            <h3>残片兑换 <span style="color:#64748b;font-size:12px;font-weight:normal">（<span id="fragCount">0</span>）</span></h3>
+            <span class="frag-btn" data-frag-idx="0">2→道具</span>
+            <span class="frag-btn" data-frag-idx="1">3→护盾</span>
+            <span class="frag-btn" data-frag-idx="2">4→回血</span>
+            <span class="frag-btn" data-frag-idx="3">5→信物</span>
+          </div>
+        </div>
+        <div id="smallSidePanel" style="display:none">
+          <div class="panel">
+            <h3>小棋盘对决</h3>
+            <div class="small-score-row">
+              <span>你</span><span class="me-score" id="smallMyScore">0</span>
+            </div>
+            <div class="small-score-row">
+              <span id="smallOppName">对手</span><span class="opp-score" id="smallOppScore">0</span>
+            </div>
+            <div class="hint" style="margin-top:4px">先到 10 分或 60 秒高分者胜</div>
+          </div>
+          <div class="panel">
+            <h3>回合</h3>
+            <div class="hint" id="smallTurnText">观察期</div>
+            <div class="cooldown-bar"><div id="smallTurnBar" style="width:100%"></div></div>
+            <div class="hint" style="margin-top:6px" id="smallEndsText"></div>
+            <div class="hint" style="margin-top:6px" id="smallStatusText"></div>
+          </div>
+          <div class="panel">
+            <h3>道具 <span style="color:#64748b;font-size:12px;font-weight:normal">（<span id="smallItemCount">0</span>/2）</span></h3>
+            <div id="smallItemList"><span style="color:#94a3b8;font-size:12px">空</span></div>
+            <div class="hint" style="margin-top:6px">点击道具即使用</div>
+          </div>
+          <div class="panel">
+            <h3>操作</h3>
+            <div class="hint">
+              · 点相邻空格：移动 1 格<br>
+              · 点 2 格外直线格：冲刺<br>
+              · 点自己脚下：驻守（该点额外 +1）
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="flash-msg" id="flashMsg"></div>
+<div id="tooltip"></div>
+
+<div id="gameOverOverlay">
+  <div id="gameOverPanel">
+    <h2 id="gameOverTitle">游戏结束</h2>
+    <div class="winner-name" id="winnerName"></div>
+    <div class="result-section">
+      <h3>最终排名</h3>
+      <div id="rankList"></div>
+    </div>
+    <div class="result-section">
+      <h3>你的对局数据</h3>
+      <div class="stat-grid" id="statGrid"></div>
+    </div>
+    <div style="text-align:center;margin-top:16px">
+      <button onclick="location.reload()">返回大厅</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+const CONFIG = { SIZE: 16, TILE: 45, SMALL_SIZE: 7, SMALL_TILE: 90, FOG_VIEW: 7 };
+
+const BIG_ITEM_DEFS = {
+  'item_0': { glyph: '疾', name: '疾行符', desc: '选相邻格立即移动1格，不占冷却', select: true },
+  'item_1': { glyph: '传', name: '传送卷轴', desc: '沿直线≤5格传送到已探索格', select: true },
+  'item_2': { glyph: '扫', name: '扫描仪', desc: '周围5格显形10秒', select: false },
+  'item_3': { glyph: '盾', name: '护盾符', desc: '获得1层护盾', select: false },
+  'item_4': { glyph: '障', name: '路障', desc: '在相邻空格放置路障15秒', select: true },
+  'item_5': { glyph: '钥', name: '裂隙钥匙', desc: '下次裂隙等待减半，小棋盘多1道具', select: false },
+  'item_6': { glyph: '医', name: '医疗包', desc: '恢复1点生命', select: false },
+  'item_7': { glyph: '诱', name: '诱饵干扰器', desc: '周围7格内假广播5秒', select: false },
+  'item_8': { glyph: '乱', name: '失控干扰器', desc: '使周围3×3内其他玩家失控一回合（下次移动随机）', select: false }
+};
+const SMALL_ITEM_DEFS = {
+  push: { glyph: '推', name: '推挤', desc: '将对手沿最近控制点反方向推1格' },
+  block: { glyph: '封', name: '封锁', desc: '随机封锁未占领控制点2回合' },
+  trap: { glyph: '陷', name: '陷阱', desc: '随机放在控制点周围，踩中下回合不能动' },
+  steal: { glyph: '偷', name: '偷分', desc: '偷取对手1分' },
+  swap: { glyph: '换', name: '置换', desc: '与对手交换位置' }
+};
+
+/* ============ 音效 ============ */
+let audioCtx = null;
+let muted = localStorage.getItem('rift_muted') === '1';
+function initAudio() {
+  if (audioCtx) return;
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+}
+const SOUND_DEFS = {
+  move: { freq: 600, dur: 0.05, type: 'square', vol: 0.08, throttle: true },
+  blocked: { freq: 180, dur: 0.1, type: 'square', vol: 0.08, throttle: true },
+  teleport: { freq: 900, dur: 0.28, type: 'triangle', vol: 0.12, slide: -650 },
+  pickup: { freq: 880, dur: 0.08, type: 'sine', vol: 0.10, second: 1320, throttle: true },
+  item: { freq: 520, dur: 0.12, type: 'triangle', vol: 0.08, throttle: true },
+  collapseWarn: { freq: 1200, dur: 0.04, type: 'sine', vol: 0.04, throttle: true },
+  collapseHit: { freq: 120, dur: 0.25, type: 'sawtooth', vol: 0.10, slide: -60, throttle: true },
+  riftBroadcast: { freq: 400, dur: 0.12, type: 'sine', vol: 0.05, throttle: true },
+  riftEnter: { freq: 300, dur: 0.3, type: 'sine', vol: 0.08, slide: 300 },
+  riftMatch: { freq: 440, dur: 0.12, type: 'sine', vol: 0.10, second: 660 },
+  smallTurn: { freq: 800, dur: 0.03, type: 'sine', vol: 0.03, throttle: true },
+  smallScore: { freq: 1000, dur: 0.06, type: 'sine', vol: 0.08, second: 1200, throttle: true },
+  dash: { freq: 800, dur: 0.15, type: 'sine', vol: 0.08, slide: -400, throttle: true },
+  hurt: { freq: 300, dur: 0.2, type: 'sawtooth', vol: 0.15, slide: -150 },
+  shield: { freq: 2000, dur: 0.08, type: 'square', vol: 0.15 },
+  victory: { freq: 523, dur: 0.15, type: 'sine', vol: 0.15, second: 659, third: 784 },
+  defeat: { freq: 400, dur: 0.2, type: 'sine', vol: 0.15, second: 200 },
+  blessing: { freq: 660, dur: 0.08, type: 'sine', vol: 0.15, second: 880, third: 1100 }
+};
+const soundLastPlayed = {};
+function playTone(freq, dur, type, vol, slide) {
+  if (!audioCtx || muted) return;
+  try {
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
+        // 检测是否为移动端（手机/平板），如果是则音量放大 3 倍
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const finalVol = Math.min(1.0, (vol || 0.1) * (isMobile ? 3.0 : 1.0));
+    
+    gain.gain.setValueAtTime(finalVol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + dur);
+  } catch (e) {}
+}
+function playSound(id) {
+  if (muted || !audioCtx) return;
+  const def = SOUND_DEFS[id];
+  if (!def) return;
+  const now = performance.now();
+  if (def.throttle) {
+    if (soundLastPlayed[id] && now - soundLastPlayed[id] < 80) return;
+    soundLastPlayed[id] = now;
+  }
+  playTone(def.freq, def.dur, def.type, def.vol, def.slide);
+  if (def.second) setTimeout(() => playTone(def.second, def.dur, def.type, def.vol * 0.9, 0), Math.round(def.dur * 600));
+  if (def.third) setTimeout(() => playTone(def.third, def.dur, def.type, def.vol * 0.85, 0), Math.round(def.dur * 1200));
+}
+
+/* ============ 动效 ============ */
+let effects = [];
+let effNow = 0;
+function addEffect(type, x, y, duration, data, layer) {
+  const sameCell = effects.filter(e => e.x === x && e.y === y);
+  if (sameCell.length >= 3) {
+    const removable = sameCell.find(e => e.type !== 'floatText' && e.type !== 'smallScore');
+    if (removable) effects.splice(effects.indexOf(removable), 1);
+    else effects.splice(effects.indexOf(sameCell[0]), 1);
+  }
+  if (effects.length >= 80) effects.shift();
+  effects.push({ type, x, y, startAt: effNow, duration, data: data || {}, layer: layer || 'unit' });
+}
+function drawEffectsByLayer(layer, coordFn, ctx) {
+  for (const e of effects) {
+    if (e.layer !== layer) continue;
+    const progress = (effNow - e.startAt) / e.duration;
+    if (progress < 0 || progress > 1) continue;
+    drawEffect(e, progress, coordFn, ctx);
+  }
+}
+function drawEffect(e, progress, coordFn, ctx) {
+  const { x, y } = coordFn(e.x, e.y);
+  if (e.type === 'dashTrail') {
+    const r = 20 * (1 - progress * 0.5);
+    ctx.fillStyle = 'rgba(245,158,11,' + (0.45 * (1 - progress)) + ')';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  } else if (e.type === 'collapseBurst') {
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 / 6) * i + progress * 2;
+      const d = progress * 26;
+      ctx.fillStyle = 'rgba(220,38,38,' + (1 - progress) + ')';
+      ctx.fillRect(x + Math.cos(angle) * d - 3, y + Math.sin(angle) * d - 3, 6, 6);
+    }
+  } else if (e.type === 'shieldRing') {
+    ctx.strokeStyle = 'rgba(192,192,192,' + (1 - progress) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 18 + progress * 24, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+  } else if (e.type === 'riftPulse') {
+    ctx.strokeStyle = 'rgba(124,58,237,' + (1 - progress) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 12 + progress * 40, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+  } else if (e.type === 'teleportBurst') {
+    const r = 20 + progress * 30;
+    ctx.strokeStyle = 'rgba(59,130,246,' + (1 - progress) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(147,197,253,' + (0.6 * (1 - progress)) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r * 1.4, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      const angle = (Math.PI * 2 / 4) * i + progress * 3;
+      const dx = Math.cos(angle) * progress * 35;
+      const dy = Math.sin(angle) * progress * 35;
+      ctx.fillStyle = 'rgba(59,130,246,' + (1 - progress) + ')';
+      ctx.fillRect(x + dx - 2, y + dy - 2, 4, 4);
+    }
+    ctx.lineWidth = 1;
+  } else if (e.type === 'disorientBurst') {
+    const r = 24 + progress * 32;
+    ctx.strokeStyle = 'rgba(220,38,38,' + (1 - progress) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI * 2 / 6) * i + progress * 4;
+      const dx = Math.cos(a) * (10 + progress * 20);
+      const dy = Math.sin(a) * (10 + progress * 20);
+      ctx.fillStyle = 'rgba(251,191,36,' + (1 - progress) + ')';
+      ctx.beginPath(); ctx.arc(x + dx, y + dy, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.lineWidth = 1;
+  } else if (e.type === 'hurtFlash') {
+    ctx.strokeStyle = 'rgba(220,38,38,' + (1 - progress) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+  } else if (e.type === 'floatText') {
+    ctx.save();
+    ctx.globalAlpha = 1 - progress;
+    ctx.font = 'bold 16px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = e.data.color || '#d97706';
+    ctx.fillText(e.data.text || '+1', x + 10, y - 14 - 20 * progress);
+    ctx.restore();
+  } else if (e.type === 'smallScore') {
+    ctx.save();
+    ctx.globalAlpha = 1 - progress;
+    ctx.font = 'bold 18px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = e.data.side === 'b' ? '#dc2626' : '#2563eb';
+    ctx.fillText(e.data.text || '+1', x + 8, y - 10 - 16 * progress);
+    ctx.restore();
+  }
+}
+
+/* ============ 状态 ============ */
+let myState = null;
+let prevState = null;
+let myId = null;
+let selectedMode = 'CLASSIC';
+let lastCooldownUpdate = 0;
+let lastWarnUpdate = 0;
+let localWarnRemaining = 0;
+let lastSmallUpdate = 0;
+let smallNextTurnRemain = 0;
+let smallEndsRemain = 0;
+let pendingItemUse = null;
+let lastBigItemsKey = '';
+let lastSmallItemsKey2 = '';
+let lastBlessingKey = '';
+let lastRelicKey = '';
+let lastRankKey = '';
+let lastLogKey = '';
+let lastRelicRowKey = '';
+let lastRoomListKey = '';
+let prevHp = 3;
+let prevShields = 0;
+let prevItems = [];
+let prevSmallTurnCount = -1;
+let prevSmallMyScore = 0;
+let prevCollapseWarnCell = null;
+let prevPos = null;
+let prevDisoriented = false;
+let disorientedStartPos = null;
+let lastDisorientUpdate = 0;
+let localDisorientRemaining = 0;
+
+const lobby = document.getElementById('lobby');
+const gamePage = document.getElementById('gamePage');
+const errorMsg = document.getElementById('errorMsg');
+const spectateBanner = document.getElementById('spectateBanner');
+const waitingBanner = document.getElementById('waitingBanner');
+const bigSidePanel = document.getElementById('bigSidePanel');
+const smallSidePanel = document.getElementById('smallSidePanel');
+const itemsPanel = document.getElementById('itemsPanel');
+const playerPanel = document.getElementById('playerPanel');
+const flashMsgEl = document.getElementById('flashMsg');
+const blessingPanel = document.getElementById('blessingPanel');
+const relicPanel = document.getElementById('relicPanel');
+const relicRow = document.getElementById('relicRow');
+const relicBadge = document.getElementById('relicBadge');
+const logList = document.getElementById('logList');
+const lockStatus = document.getElementById('lockStatus');
+const tooltip = document.getElementById('tooltip');
+const muteBtn = document.getElementById('muteBtn');
+const roomListBody = document.getElementById('roomListBody');
+const roomListCount = document.getElementById('roomListCount');
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function flashMessage(msg, duration) {
+  flashMsgEl.textContent = msg;
+  flashMsgEl.style.display = 'block';
+  clearTimeout(flashMsgEl._t);
+  flashMsgEl._t = setTimeout(() => { flashMsgEl.style.display = 'none'; }, duration || 1500);
+}
+function updateMuteBtn() { muteBtn.textContent = muted ? '🔇' : '🔔'; }
+muteBtn.addEventListener('click', () => {
+  muted = !muted;
+  localStorage.setItem('rift_muted', muted ? '1' : '0');
+  updateMuteBtn();
+});
+updateMuteBtn();
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedMode = btn.dataset.mode;
+  });
+});
+
+document.getElementById('createBtn').onclick = () => {
+  initAudio();
+  errorMsg.textContent = '';
+  const name = document.getElementById('nameInput').value.trim();
+  socket.emit('create_room', { name, mode: selectedMode }, res => {
+    if (!res || !res.ok) { errorMsg.textContent = (res && res.error) || '创建失败'; return; }
+    onJoined(res);
+  });
+};
+document.getElementById('joinBtn').onclick = () => {
+  initAudio();
+  errorMsg.textContent = '';
+  const name = document.getElementById('nameInput').value.trim();
+  const code = document.getElementById('codeInput').value.toUpperCase().trim();
+  if (!code) { errorMsg.textContent = '请输入房间码'; return; }
+  socket.emit('join_room', { name, code }, res => {
+    if (!res || !res.ok) { errorMsg.textContent = (res && res.error) || '加入失败'; return; }
+    onJoined(res);
+  });
+};
+document.getElementById('codeInput').addEventListener('keypress', e => {
+  if (e.key === 'Enter') document.getElementById('joinBtn').click();
+});
+
+function onJoined(res) {
+  myId = res.playerId;
+  lobby.style.display = 'none';
+  gamePage.style.display = 'block';
+  document.getElementById('roomCode').textContent = res.code;
+}
+
+/* ============ 房间列表 ============ */
+socket.on('rooms_list', list => {
+  renderRoomList(list || []);
+});
+
+function renderRoomList(list) {
+  const key = list.map(r => r.code + ':' + r.total + ':' + r.humans).join('|');
+  if (key === lastRoomListKey) return;
+  lastRoomListKey = key;
+
+  roomListCount.textContent = list.length > 0 ? ('共 ' + list.length + ' 个') : '';
+  if (list.length === 0) {
+    roomListBody.innerHTML = '<div class="room-list-empty">暂无房间</div>';
+    return;
+  }
+  roomListBody.innerHTML = list.map(r => {
+    const modeCls = r.mode === 'FOG' ? 'fog' : '';
+    const modeTxt = r.mode === 'FOG' ? '迷雾' : '经典';
+    const aiTxt = r.ai > 0 ? ' · ' + r.ai + ' AI' : '';
+    return `<div class="room-row" data-room-code="${escapeHtml(r.code)}">
+      <span class="rr-code">${escapeHtml(r.code)}</span>
+      <span class="rr-mode ${modeCls}">${modeTxt}</span>
+      <span class="rr-count">${r.humans}人${aiTxt} / ${r.max}</span>
+    </div>`;
+  }).join('');
+}
+
+roomListBody.addEventListener('pointerdown', e => {
+  const row = e.target.closest('[data-room-code]');
+  if (!row) return;
+  e.preventDefault();
+  initAudio();
+  errorMsg.textContent = '';
+  const code = row.dataset.roomCode;
+  const name = document.getElementById('nameInput').value.trim();
+  socket.emit('join_room', { name, code }, res => {
+    if (!res || !res.ok) { errorMsg.textContent = (res && res.error) || '加入失败'; return; }
+    onJoined(res);
+  });
+});
+
+/* ============ 状态接收 ============ */
+let classicMobileHinted = false;
+socket.on('state', s => {
+  if (!classicMobileHinted && s.mode === 'CLASSIC' && window.innerWidth < 700) {
+    classicMobileHinted = true;
+    setTimeout(() => {
+      flashMessage('手机推荐用迷雾模式，格子更大更好点', 4000);
+    }, 800);
+  }
+  prevState = myState;
+  myState = s;
+  if (!myId) {
+    const me = s.players.find(p => p.isMe);
+    if (me) myId = me.id;
+  }
+  lastCooldownUpdate = performance.now();
+  lastDisorientUpdate = performance.now();
+  localDisorientRemaining = s.myDisorientedRemaining || 0;
+  if (s.collapse.warnCell) {
+    localWarnRemaining = s.collapse.warnRemaining;
+    lastWarnUpdate = performance.now();
+  } else {
+    localWarnRemaining = 0;
+  }
+  if (s.small) {
+    lastSmallUpdate = performance.now();
+    smallNextTurnRemain = Math.max(0, s.small.nextTurnAt - s.small.serverNow);
+    smallEndsRemain = Math.max(0, s.small.endsAt - s.small.serverNow);
+  }
+  detectEvents(s);
+  render();
+  updatePanels();
+});
+
+function detectEvents(s) {
+  const me = s.players.find(p => p.isMe);
+  if (!me) return;
+
+  if (prevPos && me.alive && !me.waitingRiftId && !s.small && !(prevState && prevState.small)) {
+    const jumpDist = Math.abs(me.x - prevPos.x) + Math.abs(me.y - prevPos.y);
+    if (jumpDist > 1) {
+      addEffect('teleportBurst', me.x, me.y, 500, null, 'unit');
+      playSound('teleport');
+    }
+  }
+  if (me.alive && !me.waitingRiftId && !s.small) {
+    prevPos = { x: me.x, y: me.y };
+  } else {
+    prevPos = null;
+  }
+
+  // 失控状态变化
+  if (s.myDisoriented && !prevDisoriented) {
+    addEffect('disorientBurst', me.x, me.y, 600, null, 'unit');
+    flashMessage('你被失控干扰了！下次移动方向随机', 2000);
+    disorientedStartPos = { x: me.x, y: me.y };
+  }
+  if (!s.myDisoriented && prevDisoriented) {
+    const moved = disorientedStartPos && (me.x !== disorientedStartPos.x || me.y !== disorientedStartPos.y);
+    if (moved) {
+      addEffect('disorientBurst', me.x, me.y, 500, null, 'unit');
+      playSound('move');
+      flashMessage('失控：自动移动了一格', 1500);
+    } else {
+      flashMessage('失控状态解除', 1500);
+    }
+    disorientedStartPos = null;
+  }
+  prevDisoriented = !!s.myDisoriented;
+
+  if (s.collapse.warnCell && !prevCollapseWarnCell) {
+    if (canSeeCell(s.collapse.warnCell.x, s.collapse.warnCell.y, s)) playSound('collapseWarn');
+  }
+  if (!s.collapse.warnCell && prevCollapseWarnCell) {
+    if (canSeeCell(prevCollapseWarnCell.x, prevCollapseWarnCell.y, s)) {
+      addEffect('collapseBurst', prevCollapseWarnCell.x, prevCollapseWarnCell.y, 400, null, 'terrain');
+      playSound('collapseHit');
+    }
+  }
+  prevCollapseWarnCell = s.collapse.warnCell ? { x: s.collapse.warnCell.x, y: s.collapse.warnCell.y } : null;
+
+  if (me.hp !== undefined && me.hp < prevHp && me.alive) {
+    addEffect('hurtFlash', me.x, me.y, 300, null, 'unit');
+    addEffect('floatText', me.x, me.y, 600, { text: '-' + (prevHp - me.hp), color: '#dc2626' }, 'ui');
+    playSound('hurt');
+  }
+  if (me.hp !== undefined) prevHp = me.hp;
+
+  if (me.shields !== undefined && me.shields > prevShields) {
+    addEffect('shieldRing', me.x, me.y, 300, null, 'unit');
+    playSound('shield');
+  }
+  if (me.shields !== undefined) prevShields = me.shields;
+
+  const myItems = s.myItems || [];
+  if (myItems.length > prevItems.length && !pendingItemUse) {
+    const prevMe = prevState ? prevState.players.find(p => p.isMe) : null;
+    const moved = prevMe && prevMe.x !== undefined && (prevMe.x !== me.x || prevMe.y !== me.y);
+    if (moved || prevItems.length === 0) {
+      addEffect('floatText', me.x, me.y, 600, { text: '+1', color: '#d97706' }, 'ui');
+      playSound('pickup');
+    }
+  }
+  prevItems = myItems;
+
+  if (s.myRiftHints && s.myRiftHints.length > 0) {
+    const prevHints = prevState ? (prevState.myRiftHints || []) : [];
+    if (s.myRiftHints.length > prevHints.length) playSound('riftBroadcast');
+  }
+
+  if (me.waitingRiftId && !(prevState && (prevState.players.find(p => p.isMe) || {}).waitingRiftId)) {
+    playSound('riftEnter');
+  }
+
+  if (s.small && !(prevState && prevState.small)) {
+    addEffect('riftPulse', me.x, me.y, 300, { color: '#7c3aed' }, 'unit');
+    playSound('riftMatch');
+  }
+
+  if (s.small) {
+    if (s.small.turnCount > prevSmallTurnCount && prevSmallTurnCount >= 0) playSound('smallTurn');
+    prevSmallTurnCount = s.small.turnCount;
+    if (s.small.myScore > prevSmallMyScore) {
+      const diff = s.small.myScore - prevSmallMyScore;
+      addEffect('smallScore', s.small.myPos.x, s.small.myPos.y, 600, { side: 'a', text: '+' + diff }, 'ui');
+      playSound('smallScore');
+    }
+    prevSmallMyScore = s.small.myScore;
+    const prevSm = prevState ? prevState.small : null;
+    if (prevSm && prevSm.mySide === s.small.mySide) {
+      const d = Math.abs(s.small.myPos.x - prevSm.myPos.x) + Math.abs(s.small.myPos.y - prevSm.myPos.y);
+      if (d === 2) {
+        addEffect('dashTrail', prevSm.myPos.x, prevSm.myPos.y, 300, null, 'unit');
+        playSound('dash');
+      }
+    }
+  } else {
+    prevSmallTurnCount = -1;
+    prevSmallMyScore = 0;
+  }
+
+  if (s.myPendingBlessing && !(prevState && prevState.myPendingBlessing)) playSound('blessing');
+
+  if (s.gameOver && !(prevState && prevState.gameOver)) {
+    if (me.alive && me.id === s.winnerId) playSound('victory');
+    else playSound('defeat');
+  }
+}
+
+function canSeeCell(x, y, s) {
+  if (!s || !s.tiles || !s.tiles[y]) return false;
+  const v = s.tiles[y][x];
+  return v !== undefined && v >= 0;
+}
+
+/* ============ 渲染 ============ */
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+const GRID_LINE = '#b0bccd';
+
+const TILE_NORMAL = 0, TILE_OBSTACLE = 1, TILE_RESOURCE = 2, TILE_TRANSPORT = 3, TILE_DANGER = 4, TILE_RUIN = 5, TILE_RIFT = 6;
+
+function resolveTileValue(v) {
+  if (v >= 0) return { visible: true, explored: true, tile: v };
+  if (v === -1) return { visible: false, explored: false, tile: null };
+  return { visible: false, explored: true, tile: (-v) - 2 };
+}
+
+function tileColor(tile, mode) {
+  if (mode === 'visible') {
+    if (tile === TILE_OBSTACLE) return '#7d8ba0';
+    if (tile === TILE_RESOURCE) return '#fff4cc';
+    if (tile === TILE_TRANSPORT) return '#d4f8f8';
+    if (tile === TILE_DANGER) return '#ffd0d0';
+    if (tile === TILE_RUIN) return '#4a5568';
+    if (tile === TILE_RIFT) return '#ede9fe';
+    return '#ffffff';
+  }
+  if (mode === 'explored') {
+    if (tile === TILE_OBSTACLE) return '#b8c2d0';
+    if (tile === TILE_RESOURCE) return '#f5ecd0';
+    if (tile === TILE_TRANSPORT) return '#e8f4f4';
+    if (tile === TILE_DANGER) return '#f5d8d8';
+    if (tile === TILE_RUIN) return '#94a3b8';
+    if (tile === TILE_RIFT) return '#e9e5f5';
+    return '#eef2f7';
+  }
+  return '#cfd8e3';
+}
+
+function getBigView() {
+  const isFog = myState && myState.mode === 'FOG';
+  if (!isFog) {
+    return { vx: 0, vy: 0, vs: CONFIG.SIZE, ts: CONFIG.TILE };
+  }
+  const me = myState.players.find(p => p.isMe);
+  if (!me || me.x === undefined) {
+    return { vx: 0, vy: 0, vs: CONFIG.FOG_VIEW, ts: canvas.width / CONFIG.FOG_VIEW };
+  }
+  const vs = CONFIG.FOG_VIEW;
+  const half = Math.floor(vs / 2);
+  const vx = Math.max(0, Math.min(CONFIG.SIZE - vs, me.x - half));
+  const vy = Math.max(0, Math.min(CONFIG.SIZE - vs, me.y - half));
+  return { vx, vy, vs, ts: canvas.width / vs };
+}
+
+function screenToWorldBig(sx, sy) {
+  const view = getBigView();
+  return {
+    x: view.vx + Math.floor(sx / view.ts),
+    y: view.vy + Math.floor(sy / view.ts)
+  };
+}
+
+function render() {
+  if (!myState) return;
+  effNow = performance.now();
+  effects = effects.filter(e => effNow - e.startAt < e.duration);
+  if (myState.small) renderSmallBoard();
+  else renderBigBoard();
+}
+
+function bigCoord(x, y) {
+  const view = getBigView();
+  return { x: (x - view.vx) * view.ts + view.ts / 2, y: (y - view.vy) * view.ts + view.ts / 2 };
+}
+function smallCoord(x, y) {
+  const TS = CONFIG.SMALL_TILE, size = CONFIG.SMALL_SIZE;
+  const offX = (canvas.width - TS * size) / 2;
+  const offY = (canvas.height - TS * size) / 2;
+  return { x: offX + x * TS + TS / 2, y: offY + y * TS + TS / 2 };
+}
+
+function renderBigBoard() {
+  const view = getBigView();
+  const TS = view.ts;
+  const isFog = myState.mode === 'FOG';
+  ctx.fillStyle = isFog ? '#0a0a12' : '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const warnElapsed = performance.now() - lastWarnUpdate;
+  const warnRemain = Math.max(0, localWarnRemaining - warnElapsed);
+  const warnCell = myState.collapse.warnCell;
+  const blinkOn = Math.floor(Date.now() / 100) % 2 === 0;
+
+  const me = myState.players.find(p => p.isMe);
+
+  for (let vy = 0; vy < view.vs; vy++) {
+    for (let vx = 0; vx < view.vs; vx++) {
+      const x = view.vx + vx;
+      const y = view.vy + vy;
+      const px = vx * TS;
+      const py = vy * TS;
+      const v = myState.tiles[y][x];
+      const info = resolveTileValue(v);
+      const t = info.tile;
+
+      let color;
+      if (!info.explored) color = '#cfd8e3';
+      else if (info.visible) color = tileColor(t, 'visible');
+      else color = tileColor(t, 'explored');
+
+      if (warnCell && warnCell.x === x && warnCell.y === y && warnRemain > 0 && info.visible) {
+        color = blinkOn ? '#ef4444' : '#fca5a5';
+      }
+      ctx.fillStyle = color;
+      ctx.fillRect(px, py, TS, TS);
+      ctx.strokeStyle = isFog ? '#1e293b' : GRID_LINE;
+      ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
+
+      if (!info.explored) continue;
+
+      if (t === TILE_OBSTACLE) {
+        ctx.fillStyle = info.visible ? '#94a3b8' : '#a8b3c2';
+        ctx.fillRect(px + TS * 0.18, py + TS * 0.18, TS * 0.64, TS * 0.64);
+        ctx.strokeStyle = info.visible ? '#7d8ba0' : '#b0bccd';
+        ctx.strokeRect(px + TS * 0.18, py + TS * 0.18, TS * 0.64, TS * 0.64);
+      }
+      if (t === TILE_RESOURCE && info.visible) {
+        ctx.fillStyle = '#d97706';
+        ctx.beginPath();
+        ctx.arc(px + TS / 2, py + TS / 2, TS * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      if (t === TILE_TRANSPORT && info.visible) {
+        ctx.strokeStyle = '#0891b2';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + TS * 0.22, py + TS * 0.22, TS * 0.56, TS * 0.56);
+        ctx.lineWidth = 1;
+      }
+      if (t === TILE_RIFT) {
+        const rift = myState.rifts.find(r => r.x === x && r.y === y);
+        if (rift) {
+          ctx.strokeStyle = info.visible ? '#7c3aed' : '#a78bfa';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(px + TS / 2, py + TS / 2, TS * 0.32, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.lineWidth = 1;
+          if (rift.state === 'WAITING' || rift.state === 'BUSY') {
+            ctx.fillStyle = '#7c3aed';
+            const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 200);
+            ctx.beginPath();
+            ctx.arc(px + TS / 2, py + TS / 2, TS * 0.13 * pulse, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (rift.state === 'COOLDOWN') {
+            ctx.fillStyle = 'rgba(120,120,120,0.5)';
+            ctx.beginPath();
+            ctx.arc(px + TS / 2, py + TS / 2, TS * 0.18, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+
+  if (myState.myInsightRemaining > 0) {
+    for (const rift of myState.rifts) {
+      const info = getTileValue(rift.x, rift.y);
+      if (!info || !info.explored) {
+        if (rift.x < view.vx || rift.x >= view.vx + view.vs || rift.y < view.vy || rift.y >= view.vy + view.vs) continue;
+        const px = (rift.x - view.vx) * TS + TS / 2;
+        const py = (rift.y - view.vy) * TS + TS / 2;
+        ctx.strokeStyle = '#a78bfa';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(px, py, TS * 0.35, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+      }
+    }
+  }
+
+  for (const r of myState.roadblocks) {
+    if (r.x < view.vx || r.x >= view.vx + view.vs || r.y < view.vy || r.y >= view.vy + view.vs) continue;
+    const px = (r.x - view.vx) * TS + TS / 2;
+    const py = (r.y - view.vy) * TS + TS / 2;
+    ctx.fillStyle = '#78716c';
+    ctx.fillRect(px - TS * 0.37, py - TS * 0.37, TS * 0.74, TS * 0.74);
+    ctx.strokeStyle = '#57534e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px - TS * 0.37, py - TS * 0.37, TS * 0.74, TS * 0.74);
+    ctx.lineWidth = 1;
+  }
+
+  drawEffectsByLayer('terrain', bigCoord, ctx);
+
+  if (pendingItemUse && me && me.alive) {
+    if (pendingItemUse.itemId === 'item_0') {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const tx = me.x + dx, ty = me.y + dy;
+        if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
+        if (!isWalkableClient(tx, ty, me.id)) continue;
+        const px = (tx - view.vx) * TS;
+        const py = (ty - view.vy) * TS;
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(px + 3, py + 3, TS - 6, TS - 6);
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+      }
+    } else if (pendingItemUse.itemId === 'item_1') {
+      // 传送：只高亮已探索且可通行落点
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (let d = 1; d <= 5; d++) {
+          const tx = me.x + dx * d, ty = me.y + dy * d;
+          if (tx < 0 || ty < 0 || tx >= CONFIG.SIZE || ty >= CONFIG.SIZE) break;
+          const info = getTileValue(tx, ty);
+          if (!info || !info.explored) break; // 未探索，链路断
+          if (info.tile === TILE_OBSTACLE || info.tile === TILE_RUIN) break;
+          if (info.tile === TILE_RIFT) break;
+          if (myState.players.some(p => p.alive && !p.hidden && p.x === tx && p.y === ty)) break;
+          if (myState.roadblocks.some(r => r.x === tx && r.y === ty)) break;
+          if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
+          const px = (tx - view.vx) * TS;
+          const py = (ty - view.vy) * TS;
+          ctx.fillStyle = 'rgba(59,130,246,0.18)';
+          ctx.fillRect(px, py, TS, TS);
+          ctx.strokeStyle = 'rgba(59,130,246,0.5)';
+          ctx.strokeRect(px + 2, py + 2, TS - 4, TS - 4);
+        }
+      }
+    } else if (pendingItemUse.itemId === 'item_4') {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const tx = me.x + dx, ty = me.y + dy;
+        if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
+        if (!isValidRoadblockClient(tx, ty)) continue;
+        const px = (tx - view.vx) * TS;
+        const py = (ty - view.vy) * TS;
+        ctx.fillStyle = 'rgba(120,113,108,0.3)';
+        ctx.fillRect(px, py, TS, TS);
+      }
+    }
+  }
+
+  for (const p of myState.players) {
+    if (!p.alive) continue;
+    if (p.hidden) continue;
+    if (p.x === undefined || p.y === undefined) continue;
+    if (p.x < view.vx || p.x >= view.vx + view.vs || p.y < view.vy || p.y >= view.vy + view.vs) continue;
+    const px = (p.x - view.vx) * TS + TS / 2;
+    const py = (p.y - view.vy) * TS + TS / 2;
+    const pawnR = TS * 0.34;
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath(); ctx.arc(px + 1, py + 2, pawnR, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.fill();
+
+    if (p.isAI) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.arc(px, py, pawnR + 1, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+    }
+
+    const firstChar = Array.from(p.name)[0] || '?';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold ' + Math.floor(TS * 0.38) + 'px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(firstChar, px, py + 1);
+    ctx.textBaseline = 'alphabetic';
+
+    if (p.isMe) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#1e3a8a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(px, py, TS * 0.40, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    if ((p.winStreak || 0) >= 2) {
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(px, py, TS * 0.46, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    if (p.shields > 0) {
+      ctx.strokeStyle = '#c0c0c0';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, TS * 0.42, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    const w = TS * 0.65, hpR = p.hp / 3;
+    const barH = Math.max(4, TS * 0.08);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(px - w / 2, py - TS * 0.48, w, barH);
+    ctx.fillStyle = hpR > 0.6 ? '#16a34a' : hpR > 0.3 ? '#ca8a04' : '#dc2626';
+    ctx.fillRect(px - w / 2, py - TS * 0.48, w * Math.max(0, hpR), barH);
+    if (p.shields > 0) {
+      ctx.fillStyle = 'rgba(192,192,192,0.6)';
+      ctx.fillRect(px - w / 2, py - TS * 0.48, w, barH);
+    }
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold ' + Math.max(10, Math.floor(TS * 0.20)) + 'px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name, px, py - TS * 0.58);
+        if (p.disoriented) {
+      ctx.fillStyle = '#dc2626';
+      ctx.font = 'bold ' + Math.floor(TS * 0.32) + 'px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', px, py - TS * 0.72);
+    }
+  }
+
+  drawEffectsByLayer('unit', bigCoord, ctx);
+  drawEffectsByLayer('ui', bigCoord, ctx);
+
+  if (isFog) {
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+    ctx.lineWidth = 1;
+  }
+
+  const hints = myState.myRiftHints || [];
+  let hintIdx = 0;
+  for (const h of hints) {
+    ctx.save();
+    ctx.font = 'bold 18px system-ui';
+    ctx.fillStyle = h.fake ? '#f59e0b' : (h.strong ? '#dc2626' : '#7c3aed');
+    ctx.textAlign = 'center';
+    const suffix = h.fake ? '（疑似干扰）' : (h.strong ? '（强敌）' : '');
+    ctx.fillText('裂隙方向：' + h.dir + suffix, canvas.width / 2, canvas.height - 14 - hintIdx * 22);
+    ctx.restore();
+    hintIdx++;
+  }
+  const exposed = myState.exposedHints || [];
+  for (const e of exposed) {
+    ctx.save();
+    ctx.font = 'bold 16px system-ui';
+    ctx.fillStyle = '#dc2626';
+    ctx.textAlign = 'center';
+    ctx.fillText('败者气息：' + e.dir + '（' + e.distLabel + '）', canvas.width / 2, canvas.height - 14 - hintIdx * 22);
+    ctx.restore();
+    hintIdx++;
+  }
+}
+
+function getTileValue(x, y) {
+  if (!myState || !myState.tiles[y]) return null;
+  const v = myState.tiles[y][x];
+  if (v === undefined) return null;
+  return resolveTileValue(v);
+}
+
+function isWalkableClient(x, y, ignoreId) {
+  if (x < 0 || y < 0 || x >= CONFIG.SIZE || y >= CONFIG.SIZE) return false;
+  const info = getTileValue(x, y);
+  if (info && (info.tile === TILE_OBSTACLE || info.tile === TILE_RUIN)) return false;
+  if (myState.roadblocks.some(r => r.x === x && r.y === y)) return false;
+  for (const p of myState.players) {
+    if (p.id !== ignoreId && p.alive && !p.hidden && p.x === x && p.y === y) return false;
+  }
+  return true;
+}
+function isValidRoadblockClient(x, y) {
+  if (x < 0 || y < 0 || x >= CONFIG.SIZE || y >= CONFIG.SIZE) return false;
+  const info = getTileValue(x, y);
+  if (info && (info.tile === TILE_OBSTACLE || info.tile === TILE_RUIN || info.tile === TILE_RIFT)) return false;
+  if (myState.roadblocks.some(r => r.x === x && r.y === y)) return false;
+  for (const p of myState.players) {
+    if (p.alive && !p.hidden && p.x === x && p.y === y) return false;
+  }
+  return true;
+}
+
+function renderSmallBoard() {
+  const sm = myState.small;
+  const TS = CONFIG.SMALL_TILE;
+  const size = CONFIG.SMALL_SIZE;
+  const offX = (canvas.width - TS * size) / 2;
+  const offY = (canvas.height - TS * size) / 2;
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const px = offX + x * TS, py = offY + y * TS;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px, py, TS, TS);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
+    }
+  }
+
+  for (const bd of sm.blockades) {
+    const px = offX + bd.x * TS, py = offY + bd.y * TS;
+    ctx.fillStyle = 'rgba(75,85,99,0.45)';
+    ctx.fillRect(px, py, TS, TS);
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px + 8, py + 8); ctx.lineTo(px + TS - 8, py + TS - 8);
+    ctx.moveTo(px + TS - 8, py + 8); ctx.lineTo(px + 8, py + TS - 8);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#1f2937';
+    ctx.font = 'bold 24px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('锁', px + TS / 2, py + TS / 2);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  for (const cp of sm.controlPoints) {
+    const px = offX + cp.x * TS, py = offY + cp.y * TS;
+    const block = sm.blockedCp.find(bc => bc.cp.x === cp.x && bc.cp.y === cp.y && bc.until > sm.turnCount);
+    const ownerColor = cp.owner === 'a' ? '#2563eb' : cp.owner === 'b' ? '#dc2626' : '#6b7280';
+    if (cp.owner === 'a') ctx.fillStyle = 'rgba(37,99,235,0.15)';
+    else if (cp.owner === 'b') ctx.fillStyle = 'rgba(220,38,38,0.15)';
+    else ctx.fillStyle = 'rgba(156,163,175,0.1)';
+    ctx.fillRect(px, py, TS, TS);
+    ctx.strokeStyle = ownerColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px + TS / 2, py + TS / 2, TS * 0.25, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    if (block) {
+      const bc = block.owner === 'a' ? '#2563eb' : '#dc2626';
+      ctx.fillStyle = bc;
+      ctx.font = 'bold 26px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('封', px + TS / 2, py + TS / 2);
+      ctx.textBaseline = 'alphabetic';
+      ctx.strokeStyle = bc;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.strokeRect(px + 3, py + 3, TS - 6, TS - 6);
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+    } else {
+      ctx.fillStyle = ownerColor;
+      ctx.font = 'bold 20px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('★', px + TS / 2, py + TS / 2);
+      ctx.textBaseline = 'alphabetic';
+    }
+  }
+
+  for (const it of sm.items) {
+    const px = offX + it.x * TS + TS / 2;
+    const py = offY + it.y * TS + TS / 2;
+    const r = TS * 0.28;
+    roundRect(px - r, py - r, r * 2, r * 2, 7);
+    ctx.fillStyle = '#fbbf24';
+    ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    roundRect(px - r, py - r, r * 2, r * 2, 7);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#7c2d12';
+    ctx.font = 'bold 22px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const def = SMALL_ITEM_DEFS[it.type];
+    ctx.fillText(def ? def.glyph : '?', px, py);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  if (sm.myTrap) {
+    const px = offX + sm.myTrap.pos.x * TS + TS / 2;
+    const py = offY + sm.myTrap.pos.y * TS + TS / 2;
+    const r = TS * 0.24;
+    roundRect(px - r, py - r, r * 2, r * 2, 7);
+    ctx.fillStyle = '#fee2e2';
+    ctx.fill();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2;
+    roundRect(px - r, py - r, r * 2, r * 2, 7);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 20px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('陷', px, py);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  if (sm.myInput && !sm.inObserve) {
+    if (sm.myInput.type === 'hold') {
+      const px = offX + sm.myPos.x * TS, py = offY + sm.myPos.y * TS;
+      ctx.strokeStyle = '#16a34a';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 4]);
+      ctx.strokeRect(px + 3, py + 3, TS - 6, TS - 6);
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#16a34a';
+      ctx.font = 'bold 22px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('守', px + TS / 2, py + TS / 2);
+      ctx.textBaseline = 'alphabetic';
+    } else if (sm.myInput.target) {
+      if (sm.myInput.type === 'dash') {
+        const dx = sm.myInput.target.x - sm.myPos.x;
+        const dy = sm.myInput.target.y - sm.myPos.y;
+        const midX = sm.myPos.x + dx / 2, midY = sm.myPos.y + dy / 2;
+        const mpx = offX + midX * TS, mpy = offY + midY * TS;
+        ctx.fillStyle = 'rgba(245,158,11,0.35)';
+        ctx.fillRect(mpx, mpy, TS, TS);
+      }
+      const tx = offX + sm.myInput.target.x * TS;
+      const ty = offY + sm.myInput.target.y * TS;
+      ctx.strokeStyle = sm.myInput.type === 'dash' ? '#f59e0b' : '#3b82f6';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 4]);
+      ctx.strokeRect(tx + 3, ty + 3, TS - 6, TS - 6);
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+    }
+  }
+
+  drawEffectsByLayer('terrain', smallCoord, ctx);
+
+  drawSmallPawn(offX + sm.oppPos.x * TS + TS / 2, offY + sm.oppPos.y * TS + TS / 2, sm.oppColor, '对手', false, sm.oppIsAI);
+  drawSmallPawn(offX + sm.myPos.x * TS + TS / 2, offY + sm.myPos.y * TS + TS / 2, getMyColor(), '你', true, false);
+
+  drawEffectsByLayer('unit', smallCoord, ctx);
+
+  const aOwn = sm.controlPoints.filter(c => c.owner === 'a').length;
+  const bOwn = sm.controlPoints.filter(c => c.owner === 'b').length;
+  const myOwn = sm.mySide === 'a' ? aOwn : bOwn;
+  const oppOwn = sm.mySide === 'a' ? bOwn : aOwn;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 20px system-ui';
+  ctx.textAlign = 'center';
+  const oppLabel = sm.oppName + (sm.oppIsAI ? '（AI）' : '');
+  ctx.fillText('你 ' + sm.myScore + ' (' + myOwn + '点)   :   ' + oppLabel + ' ' + sm.oppScore + ' (' + oppOwn + '点)', canvas.width / 2, offY - 20);
+
+  const endsRemain = Math.max(0, smallEndsRemain - (performance.now() - lastSmallUpdate));
+  const remainSec = Math.ceil(endsRemain / 1000);
+  ctx.fillStyle = remainSec > 10 ? '#2563eb' : '#dc2626';
+  ctx.font = 'bold 18px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('剩余 ' + remainSec + 's · 先到 10 分', canvas.width / 2, offY + TS * size + 30);
+
+  drawEffectsByLayer('ui', smallCoord, ctx);
+
+  if (sm.inObserve) {
+    const obsRemain = Math.max(0, smallNextTurnRemain - (performance.now() - lastSmallUpdate));
+    const obsSec = Math.ceil(obsRemain / 1000);
+    ctx.fillStyle = 'rgba(15,23,42,0.55)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 34px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('观察期', canvas.width / 2, canvas.height / 2 - 20);
+    ctx.font = 'bold 26px system-ui';
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillText(obsSec + 's 后可操作', canvas.width / 2, canvas.height / 2 + 24);
+    ctx.font = '14px system-ui';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText('观察双方位置、控制点归属与道具分布', canvas.width / 2, canvas.height / 2 + 60);
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawSmallPawn(px, py, color, label, isMe, isAI) {
+  const TS = CONFIG.SMALL_TILE;
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath(); ctx.arc(px + 1, py + 2, TS * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(px, py, TS * 0.3, 0, Math.PI * 2); ctx.fill();
+  if (isAI) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.arc(px, py, TS * 0.3 + 1, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+  }
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(isMe ? '你' : (isAI ? 'AI' : '敌'), px, py);
+  ctx.textBaseline = 'alphabetic';
+}
+function getMyColor() {
+  const me = myState.players.find(p => p.isMe);
+  return me ? me.color : '#2563eb';
+}
+
+/* ============ HUD ============ */
+function updatePanels() {
+  if (!myState) return;
+  const me = myState.players.find(p => p.isMe);
+  if (!me) return;
+
+  const inSmall = !!myState.small;
+  bigSidePanel.style.display = inSmall ? 'none' : 'block';
+  smallSidePanel.style.display = inSmall ? 'block' : 'none';
+  if (itemsPanel) itemsPanel.style.display = inSmall ? 'none' : 'block';
+  if (playerPanel) playerPanel.style.display = inSmall ? 'none' : 'block';
+
+  document.getElementById('modeTag').textContent = myState.mode === 'FOG' ? '迷雾' : '经典';
+  document.getElementById('modeTag').className = 'mode-tag' + (myState.mode === 'FOG' ? ' fog' : '');
+
+  if (!inSmall && me.waitingRiftId && me.alive) {
+    waitingBanner.style.display = 'block';
+    const remain = Math.max(0, me.riftWaitRemaining);
+    waitingBanner.textContent = '正在等待裂隙匹配（' + Math.ceil(remain / 1000) + 's）';
+  } else {
+    waitingBanner.style.display = 'none';
+  }
+  spectateBanner.style.display = (!me.alive && !myState.gameOver) ? 'block' : 'none';
+
+  const cs = myState.collapse;
+  let collapseText = '';
+  if (!cs.started) collapseText = '等待玩家 ' + Math.ceil(cs.delayRemaining / 1000) + 's';
+  else if (cs.done) collapseText = '全部坍塌';
+  else collapseText = '第 ' + (cs.ring + 1) + '/' + cs.totalRings + ' 层（剩 ' + cs.cellsLeft + ' 格）';
+  document.getElementById('collapseStatus').textContent = collapseText;
+  lockStatus.textContent = myState.locked ? '🔒 已锁定' : '';
+
+  const hpStr = '♥'.repeat(Math.max(0, me.hp)) + '♡'.repeat(Math.max(0, 3 - me.hp));
+  document.getElementById('myHp').textContent = me.alive ? hpStr : '已淘汰';
+  document.getElementById('myShields').textContent = me.shields > 0 ? '🛡×' + me.shields : '';
+  document.getElementById('myFragments').textContent = myState.myFragments > 0 ? '残片×' + myState.myFragments : '';
+
+  const tags = [];
+  if (myState.myScanRemaining > 0) tags.push(`<span class="status-tag scan">扫描 ${Math.ceil(myState.myScanRemaining/1000)}s</span>`);
+  if (myState.myVisionRemaining > 0) tags.push(`<span class="status-tag vision">视野+1 ${Math.ceil(myState.myVisionRemaining/1000)}s</span>`);
+  if (myState.myInsightRemaining > 0) tags.push(`<span class="status-tag insight">洞察 ${Math.ceil(myState.myInsightRemaining/1000)}s</span>`);
+  const hasFakeHint = (myState.myRiftHints || []).some(h => h.fake);
+  if (hasFakeHint) tags.push(`<span class="status-tag decoy">受干扰</span>`);
+  if (myState.myDisoriented) {
+    const disorSec = Math.max(0, Math.ceil((localDisorientRemaining - (performance.now() - lastDisorientUpdate)) / 1000));
+    tags.push(`<span class="status-tag disoriented">失控 <span class="disor-num">${disorSec}</span>s</span>`);
+  }
+  document.getElementById('statusTags').innerHTML = tags.join('');
+
+  document.getElementById('playerList').innerHTML = myState.players.map(p => {
+    const h = '♥'.repeat(Math.max(0, p.hp || 0)) + '♡'.repeat(Math.max(0, 3 - (p.hp || 0)));
+    const cls = ['player-item'];
+    if (p.isMe) cls.push('me');
+    if (!p.alive) cls.push('dead');
+    const sh = (p.shields || 0) > 0 ? `<span class="sh">🛡×${p.shields}</span>` : '';
+    const streak = (p.winStreak || 0) >= 2 ? `<span style="color:#dc2626;font-size:11px;margin-left:4px">🔥${p.winStreak}</span>` : '';
+    const hiddenTag = p.hidden ? '<span class="hidden-tag">?</span>' : '';
+    const aiTag = p.isAI ? '<span class="ai-tag">AI</span>' : '';
+    const hpDisplay = p.hidden ? '?' : (p.alive ? h : '淘汰');
+    return `<div class="${cls.join(' ')}">
+      <div class="player-dot" style="background:${p.color}"></div>
+      <span>${escapeHtml(p.name)}${p.isMe ? '（你）' : ''}${aiTag}${streak}</span>
+      <span class="hp">${hpDisplay}</span>${sh}${hiddenTag}
+    </div>`;
+  }).join('');
+
+  const aliveCount = myState.players.filter(p => p.alive).length;
+  document.getElementById('playerCount').textContent = aliveCount + ' 存活 / ' + myState.players.length + ' 总计';
+
+  if (!inSmall) {
+    renderBigItems(me);
+    renderBlessing(me);
+    renderRelic(me);
+    renderFragExchange(me);
+    renderRelicRow(me);
+  } else {
+    renderSmallItems();
+  }
+
+  renderLogs();
+
+  if (myState.gameOver) renderGameOver(me);
+}
+
+function renderRelicRow(me) {
+  const relic = myState.myRelic;
+  const key = relic || '';
+  if (key === lastRelicRowKey) return;
+  lastRelicRowKey = key;
+  if (!relic) {
+    relicRow.style.display = 'none';
+    return;
+  }
+  const def = SMALL_ITEM_DEFS[relic] || { glyph: '?', name: '?' };
+  relicRow.style.display = 'block';
+  relicBadge.innerHTML = def.glyph + ' ' + escapeHtml(def.name);
+}
+
+function renderLogs() {
+  const logs = myState.logs || [];
+  const key = logs.length + ':' + (logs[logs.length - 1] || '');
+  if (key === lastLogKey) return;
+  lastLogKey = key;
+  logList.innerHTML = logs.map(l => `<div class="log-item">${escapeHtml(l)}</div>`).join('');
+  logList.scrollTop = logList.scrollHeight;
+}
+
+function renderBigItems(me) {
+  const items = myState.myItems || [];
+  document.getElementById('itemCount').textContent = items.length;
+  const key = items.join(',') + '|' + (pendingItemUse ? pendingItemUse.itemIdx : '') + '|' + me.alive;
+  const itemList = document.getElementById('itemList');
+  const hintEl = document.getElementById('itemHint');
+  if (key !== lastBigItemsKey) {
+    lastBigItemsKey = key;
+    if (items.length === 0) {
+      itemList.innerHTML = '<span style="color:#94a3b8;font-size:12px">空</span>';
+    } else {
+      itemList.innerHTML = items.map((itemId, idx) => {
+        const def = BIG_ITEM_DEFS[itemId] || { glyph: '?', name: '?' };
+        const sel = pendingItemUse && pendingItemUse.itemIdx === idx;
+        const cls = ['item-btn'];
+        if (sel) cls.push('selected');
+        return `<span class="${cls.join(' ')}" data-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">${idx + 1} ${def.glyph} ${def.name}</span>`;
+      }).join('');
+    }
+  }
+  if (pendingItemUse) {
+    const def = BIG_ITEM_DEFS[pendingItemUse.itemId];
+    hintEl.style.display = 'block';
+    hintEl.textContent = '选格模式：点击高亮格使用「' + (def ? def.name : '') + '」，ESC 取消';
+  } else {
+    hintEl.style.display = 'none';
+  }
+}
+
+function renderBlessing(me) {
+  const pb = myState.myPendingBlessing;
+  const key = pb ? pb.options.map(o => o.id).join(',') : '';
+  if (key === lastBlessingKey) return;
+  lastBlessingKey = key;
+  if (!pb) { blessingPanel.style.display = 'none'; return; }
+  blessingPanel.style.display = 'block';
+  document.getElementById('blessingList').innerHTML = pb.options.map(o =>
+    `<div class="blessing-card" data-blessing-id="${o.id}"><b>${escapeHtml(o.name)}</b>${escapeHtml(o.desc)}</div>`
+  ).join('');
+}
+
+function renderRelic(me) {
+  const pr = myState.myPendingRelic;
+  const key = pr ? pr.join(',') : '';
+  if (key === lastRelicKey) return;
+  lastRelicKey = key;
+  if (!pr || pr.length === 0) { relicPanel.style.display = 'none'; return; }
+  relicPanel.style.display = 'block';
+  document.getElementById('relicList').innerHTML = pr.map((it, i) => {
+    const def = SMALL_ITEM_DEFS[it] || { glyph: '?', name: '?' };
+    return `<div class="blessing-card" data-relic-idx="${i}" style="border-color:#c4b5fd"><b>${def.glyph} ${escapeHtml(def.name)}</b>${escapeHtml(def.desc || '')}</div>`;
+  }).join('');
+}
+
+function renderFragExchange(me) {
+  const frags = myState.myFragments || 0;
+  document.getElementById('fragCount').textContent = frags;
+  const btns = document.querySelectorAll('[data-frag-idx]');
+  btns.forEach(btn => {
+    const idx = parseInt(btn.dataset.fragIdx);
+    const costs = [2, 3, 4, 5];
+    btn.disabled = frags < costs[idx];
+  });
+}
+
+function renderSmallItems() {
+  const sm = myState.small;
+  const items = sm.myItems || [];
+  document.getElementById('smallItemCount').textContent = items.length;
+  const key = items.join(',') + '|' + sm.inObserve;
+  if (key !== lastSmallItemsKey2) {
+    lastSmallItemsKey2 = key;
+    const el = document.getElementById('smallItemList');
+    if (items.length === 0) {
+      el.innerHTML = '<span style="color:#94a3b8;font-size:12px">空</span>';
+    } else {
+      el.innerHTML = items.map((itemType, idx) => {
+        const def = SMALL_ITEM_DEFS[itemType] || { glyph: '?', name: '?' };
+        return `<span class="item-btn small-item-btn" data-small-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">${idx + 1} ${def.glyph} ${def.name}</span>`;
+      }).join('');
+    }
+  }
+  document.getElementById('smallMyScore').textContent = sm.myScore;
+  document.getElementById('smallOppName').innerHTML = escapeHtml(sm.oppName) + (sm.oppIsAI ? ' <span class="ai-tag">AI</span>' : '');
+  document.getElementById('smallOppScore').textContent = sm.oppScore;
+
+  const turnEl = document.getElementById('smallTurnText');
+  const statusEl = document.getElementById('smallStatusText');
+  if (sm.inObserve) turnEl.textContent = '观察期';
+  else turnEl.textContent = '第 ' + (sm.turnCount + 1) + ' 回合';
+
+  const statusArr = [];
+  if (sm.myStunned) statusArr.push('陷阱定身');
+  if (sm.myDashPenalty) statusArr.push('冲刺惩罚');
+  if (sm.myHoldPenalty) statusArr.push('驻守惩罚');
+  statusEl.textContent = statusArr.length > 0 ? '⚠ ' + statusArr.join(' / ') : '';
+  statusEl.style.color = statusArr.length > 0 ? '#dc2626' : '#64748b';
+}
+
+function renderGameOver(me) {
+  const overlay = document.getElementById('gameOverOverlay');
+  const title = document.getElementById('gameOverTitle');
+  const winner = document.getElementById('winnerName');
+  const rankings = myState.rankings || [];
+  const isWinner = me.alive && me.id === myState.winnerId;
+  title.textContent = isWinner ? '🏆 你赢了' : '游戏结束';
+  title.style.color = isWinner ? '#16a34a' : '#dc2626';
+  const wp = myState.players.find(p => p.id === myState.winnerId);
+  winner.textContent = wp ? ('胜者：' + wp.name + (wp.isAI ? '（AI）' : '')) : '无人存活';
+
+  const rankKey = rankings.map(r => r.id + ':' + r.hp + ':' + r.rank).join(',');
+  if (rankKey !== lastRankKey) {
+    lastRankKey = rankKey;
+    document.getElementById('rankList').innerHTML = rankings.map(r => {
+      const cls = ['rank-row'];
+      if (r.id === myId) cls.push('me');
+      if (r.rank === 1 && r.alive) cls.push('winner');
+      const aliveTag = r.alive ? '' : '（淘汰）';
+      const aiTag = r.isAI ? '<span class="ai-tag">AI</span>' : '';
+      return `<div class="${cls.join(' ')}">
+        <div class="rank-num">${r.rank}.</div>
+        <div class="rank-name">${escapeHtml(r.name)}${aiTag}${aliveTag}</div>
+        <div class="rank-stats">
+          <span>♥${r.hp}</span>
+          <span>残片${r.fragments}</span>
+          <span>道具${r.items}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    const myData = rankings.find(r => r.id === myId);
+    if (myData) {
+      const killReasonText = !myData.alive ? (myData.killReason || '未知') : (myData.rank === 1 ? '—（胜利者）' : '—（未淘汰）');
+      const stats = [
+        ['存活时间', myData.aliveTime + 's'],
+        ['拾取道具', myData.pickups || 0],
+        ['使用道具', myData.itemsUsed || 0],
+        ['进入裂隙', myData.riftEnters || 0],
+        ['小棋盘战绩', myData.smallWins + '胜 ' + myData.smallLosses + '负'],
+        ['承受伤害', myData.damageTaken],
+        ['最终排名', '第 ' + myData.rank + ' 名'],
+        ['淘汰原因', killReasonText]
+      ];
+      document.getElementById('statGrid').innerHTML = stats.map(([k, v]) =>
+        `<div class="stat-item"><span class="stat-label">${k}</span><span class="stat-value">${v}</span></div>`
+      ).join('');
+    }
+  }
+
+  overlay.style.display = 'flex';
+}
+
+function updateDisorientTag() {
+  const el = document.querySelector('.status-tag.disoriented .disor-num');
+  if (!el) return;
+  if (!myState.myDisoriented) { el.textContent = '0'; return; }
+  const remain = Math.max(0, localDisorientRemaining - (performance.now() - lastDisorientUpdate));
+  const sec = Math.max(0, Math.ceil(remain / 1000));
+  if (el.textContent !== String(sec)) el.textContent = sec;
+}
+
+function myCooldownRemaining() {
+  if (!myState) return 0;
+  const me = myState.players.find(p => p.isMe);
+  if (!me || me.cooldownRemaining === undefined) return 0;
+  const elapsed = performance.now() - lastCooldownUpdate;
+  return Math.max(0, me.cooldownRemaining - elapsed);
+}
+
+function tickCooldown() {
+  if (!myState) return;
+  const me = myState.players.find(p => p.isMe);
+  if (!me) return;
+  updateDisorientTag();
+  if (myState.small) {
+    const elapsed = performance.now() - lastSmallUpdate;
+    const nextRemain = Math.max(0, smallNextTurnRemain - elapsed);
+    const endsRemain = Math.max(0, smallEndsRemain - elapsed);
+    document.getElementById('smallTurnBar').style.width = Math.max(0, Math.min(100, (1 - nextRemain / 3000) * 100)) + '%';
+    document.getElementById('smallEndsText').textContent = '剩余 ' + Math.ceil(endsRemain / 1000) + 's';
+    return;
+  }
+
+  if (!me.alive) {
+    document.getElementById('cooldownBar').style.width = '0%';
+    document.getElementById('cooldownText').textContent = '观战中';
+    return;
+  }
+  if (me.waitingRiftId) {
+    document.getElementById('cooldownBar').style.width = '0%';
+    document.getElementById('cooldownText').textContent = '等待匹配中';
+    return;
+  }
+  const elapsed = performance.now() - lastCooldownUpdate;
+  const remaining = Math.max(0, (me.cooldownRemaining || 0) - elapsed);
+  const total = 3000 + ((me.fatigueRemaining && me.fatigueRemaining > 0) ? 1000 : 0);
+  const pct = Math.max(0, Math.min(100, (1 - remaining / total) * 100));
+  document.getElementById('cooldownBar').style.width = pct + '%';
+  const fatigueTag = (me.fatigueRemaining && me.fatigueRemaining > 0) ? ' <span style="color:#dc2626;font-size:11px">疲惫</span>' : '';
+  const disorTag = myState.myDisoriented ? ' <span style="color:#dc2626;font-size:11px">失控</span>' : '';
+  document.getElementById('cooldownText').innerHTML = remaining > 0
+    ? '冷却中 ' + (remaining / 1000).toFixed(1) + 's' + fatigueTag + disorTag
+    : '可移动' + fatigueTag + disorTag;
+}
+setInterval(tickCooldown, 50);
+
+function loopRender() {
+  if (myState) render();
+  requestAnimationFrame(loopRender);
+}
+requestAnimationFrame(loopRender);
+
+/* ============ 输入 ============ */
+function onBigItemClick(idx) {
+  if (!myState) return;
+  const me = myState.players.find(p => p.isMe);
+  if (!me || !me.alive) return;
+  const items = myState.myItems || [];
+  if (idx < 0 || idx >= items.length) return;
+  const itemId = items[idx];
+  const def = BIG_ITEM_DEFS[itemId];
+  if (!def) return;
+
+  const elapsed = performance.now() - lastCooldownUpdate;
+  const remaining = (me.cooldownRemaining || 0) - elapsed;
+  if (itemId !== 'item_0' && remaining > 0) {
+    flashMessage('冷却中，无法使用道具');
+    return;
+  }
+  if (pendingItemUse && pendingItemUse.itemIdx === idx) {
+    pendingItemUse = null;
+    updatePanels();
+    return;
+  }
+  if (def.select) {
+    pendingItemUse = { itemIdx: idx, itemId };
+    updatePanels();
+    return;
+  }
+  socket.emit('use_item', { itemIdx: idx }, res => {
+    if (res && res.ok) playSound('item');
+    else if (res && !res.ok) flashMessage(res.error || '使用失败');
+  });
+}
+function onSmallItemClick(idx) {
+  if (!myState || !myState.small) return;
+  const sm = myState.small;
+  if (sm.inObserve) { flashMessage('观察期内不可操作'); return; }
+  if (idx < 0 || idx >= sm.myItems.length) return;
+  socket.emit('small_action', { type: 'item', itemIdx: idx }, res => {
+    if (res && res.ok) playSound('item');
+    else if (res && !res.ok) flashMessage(res.error || '操作失败');
+  });
+}
+
+document.addEventListener('pointerdown', e => {
+  const btn = e.target.closest('[data-item-idx]');
+  if (btn) { e.preventDefault(); onBigItemClick(parseInt(btn.dataset.itemIdx)); return; }
+  const sbtn = e.target.closest('[data-small-item-idx]');
+  if (sbtn) { e.preventDefault(); onSmallItemClick(parseInt(sbtn.dataset.smallItemIdx)); return; }
+  const fbtn = e.target.closest('[data-frag-idx]');
+  if (fbtn && !fbtn.disabled) {
+    e.preventDefault();
+    socket.emit('fragment_exchange', { idx: parseInt(fbtn.dataset.fragIdx) }, res => {
+      if (res && res.ok) playSound('pickup');
+      else if (res && !res.ok) flashMessage(res.error || '兑换失败');
+    });
+    return;
+  }
+  const bbtn = e.target.closest('[data-blessing-id]');
+  if (bbtn) {
+    e.preventDefault();
+    socket.emit('choose_blessing', { id: bbtn.dataset.blessingId }, res => {
+      if (res && res.ok) playSound('blessing');
+      else if (res && !res.ok) flashMessage(res.error || '选择失败');
+    });
+    return;
+  }
+  const rbtn = e.target.closest('[data-relic-idx]');
+  if (rbtn) {
+    e.preventDefault();
+    socket.emit('choose_relic', { idx: parseInt(rbtn.dataset.relicIdx) }, res => {
+      if (res && res.ok) playSound('pickup');
+      else if (res && !res.ok) flashMessage(res.error || '选择失败');
+    });
+    return;
+  }
+});
+
+window.addEventListener('keydown', e => {
+  if (gamePage.style.display === 'none') return;
+  if (e.key === 'Escape') {
+    if (pendingItemUse) { pendingItemUse = null; updatePanels(); }
+    return;
+  }
+  if (myState && myState.small) return;
+  if (e.key === '1' || e.key === '2' || e.key === '3') {
+    e.preventDefault();
+    onBigItemClick(parseInt(e.key) - 1);
+    return;
+  }
+  const m = {
+    ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+    w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
+    W: [0, -1], S: [0, 1], A: [-1, 0], D: [1, 0]
+  };
+  const d = m[e.key];
+  if (d) {
+    e.preventDefault();
+    pendingItemUse = null;
+    const meK = myState ? myState.players.find(p => p.isMe) : null;
+    if (meK && meK.alive && !meK.waitingRiftId && !myState.small && myCooldownRemaining() > 0) {
+      playSound('blocked');
+      flashMessage('冷却中，还不能移动');
+      return;
+    }
+    const me = myState ? myState.players.find(p => p.isMe) : null;
+    if (me && me.alive && me.x !== undefined && !me.waitingRiftId && !myState.small) {
+      const nx = me.x + d[0], ny = me.y + d[1];
+      const info = getTileValue(nx, ny);
+      if (!(info && info.tile === TILE_RIFT)) playSound('move');
+    }
+    socket.emit('move', { dx: d[0], dy: d[1] }, res => {
+      if (res && !res.ok && res.error) flashMessage(res.error);
+      if (res && res.ok && res.disoriented) {
+        flashMessage('失控：移动方向被随机改变', 1500);
+        disorientedStartPos = null;
+      }
+    });
+  }
+});
+
+canvas.addEventListener('click', e => {
+  e.preventDefault();
+  if (!myState) return;
+  const me = myState.players.find(p => p.isMe);
+  if (!me || !me.alive) return;
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width / r.width;
+  const sy = canvas.height / r.height;
+  const cx = (e.clientX - r.left) * sx;
+  const cy = (e.clientY - r.top) * sy;
+
+  if (myState.small) {
+    const sm = myState.small;
+    if (sm.inObserve) { flashMessage('观察期内不可操作'); return; }
+    const TS = CONFIG.SMALL_TILE;
+    const size = CONFIG.SMALL_SIZE;
+    const offX = (canvas.width - TS * size) / 2;
+    const offY = (canvas.height - TS * size) / 2;
+    const x = Math.floor((cx - offX) / TS);
+    const y = Math.floor((cy - offY) / TS);
+    if (x < 0 || y < 0 || x >= size || y >= size) return;
+
+    const myPos = sm.myPos;
+    const oppPos = sm.oppPos;
+    if (x === myPos.x && y === myPos.y) {
+      if (sm.myStunned || sm.myDashPenalty) { flashMessage('本回合被定身，无法驻守'); return; }
+      socket.emit('small_action', { type: 'hold' }, res => {
+        if (res && res.ok) playSound('smallTurn');
+        else if (res && !res.ok) flashMessage(res.error || '操作失败');
+      });
+      return;
+    }
+    if (x === oppPos.x && y === oppPos.y) { flashMessage('不能走到对手格子上'); return; }
+    const canMove = !sm.myStunned && !sm.myDashPenalty && !sm.myHoldPenalty;
+    if (!canMove) { flashMessage('本回合无法移动'); return; }
+
+    const dx = x - myPos.x, dy = y - myPos.y;
+    const d = Math.abs(dx) + Math.abs(dy);
+    if (d === 1) {
+      if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); return; }
+      socket.emit('small_action', { type: 'move', target: { x, y } }, res => {
+        if (res && res.ok) playSound('smallTurn');
+        else if (res && !res.ok) flashMessage(res.error || '操作失败');
+      });
+    } else if (d === 2 && (dx === 0 || dy === 0)) {
+      if (sm.myDashPenalty) { flashMessage('冲刺惩罚中'); return; }
+      const midX = myPos.x + dx / 2, midY = myPos.y + dy / 2;
+      if (sm.blockades.some(bd => bd.x === midX && bd.y === midY)) { flashMessage('冲刺路径被封锁'); return; }
+      if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); return; }
+      socket.emit('small_action', { type: 'dash', target: { x, y } }, res => {
+        if (res && res.ok) playSound('dash');
+        else if (res && !res.ok) flashMessage(res.error || '操作失败');
+      });
+    } else {
+      flashMessage('只能移动1格或直线冲刺2格');
+    }
+    return;
+  }
+
+  const { x, y } = screenToWorldBig(cx, cy);
+  if (x < 0 || y < 0 || x >= CONFIG.SIZE || y >= CONFIG.SIZE) return;
+
+  if (pendingItemUse) {
+    const idx = pendingItemUse.itemIdx;
+    const usedItemId = pendingItemUse.itemId;
+    pendingItemUse = null;
+    updatePanels();
+    socket.emit('use_item', { itemIdx: idx, target: { x, y } }, res => {
+      if (res && res.ok) {
+        if (usedItemId === 'item_1') playSound('teleport');
+        else playSound('item');
+      } else if (res && !res.ok) {
+        flashMessage(res.error || '使用失败');
+      }
+    });
+    return;
+  }
+  const dx = x - me.x, dy = y - me.y;
+  if (Math.abs(dx) + Math.abs(dy) !== 1) return;
+  if (myCooldownRemaining() > 0) {
+  playSound('blocked');
+  flashMessage('冷却中，还不能移动');
+  return;
+  }
+  const info = getTileValue(x, y);
+  if (!(info && info.tile === TILE_RIFT)) playSound('move');
+  socket.emit('move', { dx, dy }, res => {
+    if (res && !res.ok && res.error) flashMessage(res.error);
+    if (res && res.ok && res.disoriented) {
+      flashMessage('失控：移动方向被随机改变', 1500);
+      disorientedStartPos = null;
+    }
+  });
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!e.ctrlKey || !myState || myState.small || myState.gameOver) {
+    tooltip.style.display = 'none';
+    return;
+  }
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width / r.width;
+  const sy = canvas.height / r.height;
+  const cx = (e.clientX - r.left) * sx;
+  const cy = (e.clientY - r.top) * sy;
+  const { x, y } = screenToWorldBig(cx, cy);
+  if (x < 0 || y < 0 || x >= CONFIG.SIZE || y >= CONFIG.SIZE) {
+    tooltip.style.display = 'none';
+    return;
+  }
+  const info = getTileValue(x, y);
+  let text;
+  if (!info || !info.explored) {
+    text = '未探索';
+  } else {
+    const names = ['普通格', '障碍格', '资源格', '传送格', '危险区', '废墟', '裂隙点'];
+    text = names[info.tile] || '?';
+    if (!info.visible) text += '（已探索）';
+    if (info.tile === TILE_RESOURCE) text += '（拾取道具）';
+    if (info.tile === TILE_TRANSPORT) text += '（随机传送）';
+    if (info.tile === TILE_DANGER) text += '（每10秒-1血）';
+    if (info.tile === TILE_RUIN) text += '（不可通行）';
+    if (info.tile === TILE_RIFT) {
+      const rift = myState.rifts.find(r => r.x === x && r.y === y);
+      if (rift) {
+        if (rift.state === 'WAITING') text += '（等待匹配中）';
+        else if (rift.state === 'COOLDOWN') text += '（冷却中）';
+        else if (rift.state === 'OPEN') text += '（可进入1v1）';
+        else if (rift.state === 'UNKNOWN') text += '（状态未知）';
+      }
+    }
+    if (info.visible) {
+      for (const p of myState.players) {
+        if (p.alive && !p.hidden && p.x === x && p.y === y) {
+          text += ' · ' + p.name + (p.isAI ? '（AI）' : '');
+        }
+      }
+    }
+  }
+  tooltip.textContent = text;
+  tooltip.style.left = (e.clientX + 16) + 'px';
+  tooltip.style.top = (e.clientY + 16) + 'px';
+  tooltip.style.display = 'block';
+});
+canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+document.addEventListener('pointerdown', initAudio, { once: true });
+</script>
+</body>
+</html>
