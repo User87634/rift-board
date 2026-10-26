@@ -3,29 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>裂隙棋盘 联机版 · v7</title>
+<title>裂隙棋盘 联机版 · v9</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;background:#f0f4f8;color:#1e293b;font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;min-height:100vh}
-  .page{width:100%;max-width:1400px;padding:16px}
+  body{margin:0;background:#f0f4f8;color:#1e293b;font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;min-height:100vh;overflow-x:hidden}
+  
+  /* 大厅动态光斑背景 */
+  #bg-anim{position:fixed;inset:0;z-index:-1;overflow:hidden;background:#f0f4f8}
+  .orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:0.4;animation:float 12s infinite ease-in-out alternate}
+  .orb1{width:400px;height:400px;background:#bfdbfe;top:-10%;left:-10%}
+  .orb2{width:300px;height:300px;background:#ddd6fe;bottom:10%;right:-5%;animation-delay:-5s}
+  .orb3{width:250px;height:250px;background:#fbcfe8;top:40%;left:30%;animation-delay:-10s}
+  @keyframes float{0%{transform:translate(0,0)}100%{transform:translate(40px,50px)}}
+
+  .page{width:100%;max-width:1400px;padding:16px;position:relative;z-index:1}
   #lobby{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:90vh}
-
-  /* ★ 新增的标题外框 */
-  .header-box{
-    background:#fff;
-    border-radius:12px;
-    padding:24px 28px;
-    box-shadow:0 4px 16px rgba(0,0,0,0.06);
-    width:100%;
-    max-width:420px; /* 和下面输入卡片一样宽 */
-    text-align:center;
-    margin-bottom:16px; /* 和下面的卡片留点空隙 */
-  }
-
+  
+  .header-box{background:#fff;border-radius:12px;padding:24px 28px;box-shadow:0 4px 16px rgba(0,0,0,0.06);width:100%;max-width:420px;text-align:center;margin-bottom:16px}
   .header-box h1{font-size:36px;margin:0 0 8px;color:#0f172a}
   .header-box .sub{color:#64748b;margin-bottom:8px}
   .header-box .disclaimer{font-size:12px;color:#94a3b8;margin:0;text-align:center;line-height:1.5}
+  
   .card{background:#fff;border-radius:12px;padding:24px 28px;box-shadow:0 4px 16px rgba(0,0,0,0.06);width:100%;max-width:420px}
   .field{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
   .field label{font-size:13px;color:#475569;font-weight:600}
@@ -33,20 +32,16 @@
   .field input:focus{border-color:#3b82f6}
   .divider{text-align:center;color:#94a3b8;font-size:13px;margin:10px 0;position:relative}
   .divider::before,.divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:#e2e8f0}
-  .divider::before{left:0}
-  .divider::after{right:0}
+  .divider::before{left:0}.divider::after{right:0}
   button{padding:11px 18px;background:#3b82f6;color:#fff;border:0;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;width:100%}
-  button:hover{background:#2563eb}
-  button:disabled{background:#94a3b8;cursor:not-allowed}
+  button:hover{background:#2563eb}button:disabled{background:#94a3b8;cursor:not-allowed}
   .mode-row{display:flex;gap:8px;margin-bottom:14px}
   .mode-btn{flex:1;padding:12px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;color:#475569;cursor:pointer;text-align:center;transition:all 0.15s;font-size:13px;font-weight:600}
-  .mode-btn:hover{border-color:#93c5fd}
-  .mode-btn.active{border-color:#3b82f6;background:#eff6ff;color:#1e40af}
+  .mode-btn:hover{border-color:#93c5fd}.mode-btn.active{border-color:#3b82f6;background:#eff6ff;color:#1e40af}
   .mode-btn .mode-name{display:block;font-size:14px;margin-bottom:2px;font-weight:700}
   .mode-btn .mode-desc{font-size:11px;font-weight:400;color:#64748b}
   #errorMsg{color:#dc2626;font-size:13px;text-align:center;margin-top:10px;min-height:18px}
 
-  /* 房间列表 */
   .room-list-panel{width:100%;max-width:420px;margin-top:16px;background:#fff;border-radius:12px;padding:16px 20px;box-shadow:0 4px 16px rgba(0,0,0,0.06)}
   .room-list-panel h3{margin:0 0 10px;font-size:14px;color:#0f172a;display:flex;justify-content:space-between;align-items:center}
   .room-list-panel h3 span{font-size:12px;color:#94a3b8;font-weight:normal}
@@ -72,17 +67,21 @@
   .player-count{color:#64748b;font-size:13px}
   .collapse-status{font-size:13px;font-weight:600;color:#dc2626}
   .lock-status{font-size:12px;color:#94a3b8}
+  
   .game-layout{display:flex;gap:12px;align-items:flex-start}
   .col-left{width:220px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;max-height:760px;overflow-y:auto}
   .col-board{flex-shrink:0}
   .col-right{flex:1;min-width:260px;max-width:340px;max-height:760px;overflow-y:auto}
+  
   #logPanel{background:#fff;border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);display:flex;flex-direction:column;min-height:120px}
   #logPanel h3{margin:0 0 8px;font-size:14px;color:#0f172a;flex-shrink:0}
   #logList{flex:1;overflow-y:auto;font-size:11px;color:#475569;line-height:1.5;padding-right:4px;max-height:200px}
   #logList::-webkit-scrollbar{width:4px}
   #logList::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}
   #logList .log-item{padding:3px 0;border-bottom:1px solid #f1f5f9}
+  
   #board{background:#fff;border:2px solid #cbd5e1;border-radius:8px;display:block;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+  
   .panel{background:#fff;border-radius:8px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
   .panel h3{margin:0 0 8px;font-size:14px;color:#0f172a}
   .player-item{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:13px}
@@ -93,6 +92,7 @@
   .player-item.dead{opacity:0.4}
   .player-item .hidden-tag{font-size:10px;color:#94a3b8;margin-left:4px}
   .ai-tag{display:inline-block;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;background:#e0e7ff;color:#4338ca;margin-left:4px;line-height:1.2}
+  
   .hint{font-size:12px;color:#64748b;line-height:1.5}
   .cooldown-bar{height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin-top:8px}
   .cooldown-bar>div{height:100%;background:#3b82f6;transition:width 0.1s linear}
@@ -107,25 +107,32 @@
   .status-tag.decoy{background:#fef3c7;color:#92400e}
   .status-tag.disoriented{background:#fee2e2;color:#dc2626}
   .relic-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:12px;color:#6d28d9;font-weight:600}
+  
   .spectate-banner{background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
   .waiting-banner{background:#ede9fe;color:#6d28d9;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
-  .item-btn{display:inline-block;padding:5px 9px;background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;cursor:pointer;margin:2px;font-size:12px;color:#1e40af;user-select:none;font-weight:600;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  
+  .item-btn{display:inline-block;padding:5px 9px;background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;cursor:pointer;margin:2px;font-size:12px;color:#1e40af;user-select:none;font-weight:600;touch-action:manipulation}
   .item-btn:hover{background:#dbeafe}
   .item-btn.selected{background:#3b82f6;color:#fff;border-color:#2563eb}
   .small-item-btn{background:#fef9c3;border-color:#fde047;color:#854d0e}
   .small-item-btn:hover{background:#fef08a}
+  
   .hint-box{font-size:11px;color:#7c3aed;margin-top:6px;padding:5px;background:#f5f3ff;border-radius:5px}
   .flash-msg{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(220,38,38,0.9);color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
   .small-score-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:14px}
   .small-score-row .me-score{color:#2563eb;font-weight:700;font-size:20px}
   .small-score-row .opp-score{color:#dc2626;font-weight:700;font-size:20px}
-  .frag-btn{display:inline-block;padding:4px 8px;background:#fef9c3;border:1px solid #fde047;border-radius:6px;cursor:pointer;margin:2px;font-size:11px;color:#854d0e;user-select:none;font-weight:600;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .frag-btn{display:inline-block;padding:4px 8px;background:#fef9c3;border:1px solid #fde047;border-radius:6px;cursor:pointer;margin:2px;font-size:11px;color:#854d0e;user-select:none;font-weight:600;touch-action:manipulation}
   .frag-btn:hover{background:#fef08a}
   .frag-btn:disabled{opacity:0.4;cursor:not-allowed;background:#f8fafc;color:#94a3b8;border-color:#e2e8f0}
-  .blessing-card{display:block;padding:8px 10px;background:#f0f9ff;border:2px solid #7dd3fc;border-radius:8px;cursor:pointer;margin:4px 0;font-size:12px;transition:all 0.15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  
+  .blessing-card{display:block;padding:8px 10px;background:#f0f9ff;border:2px solid #7dd3fc;border-radius:8px;cursor:pointer;margin:4px 0;font-size:12px;transition:all 0.15s;touch-action:manipulation}
   .blessing-card:hover{background:#e0f2fe;border-color:#3b82f6}
   .blessing-card b{display:block;margin-bottom:2px;color:#0c4a6e}
+  .blessing-card.confirm-wait{background:#fef3c7;border-color:#f59e0b;border-style:dashed}
+  
   #tooltip{position:fixed;background:rgba(15,23,42,0.94);color:#fff;padding:6px 10px;border-radius:6px;font-size:12px;pointer-events:none;display:none;z-index:100;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+  
   #gameOverOverlay{position:fixed;inset:0;background:rgba(240,244,248,0.97);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;overflow-y:auto}
   #gameOverPanel{background:#fff;border-radius:16px;padding:24px 28px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.15);margin:auto}
   #gameOverPanel h2{text-align:center;font-size:28px;margin:0 0 6px}
@@ -145,20 +152,14 @@
   .stat-value{font-weight:600;color:#0f172a}
 
   @media(max-width:1000px){
-    .game-layout{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-areas:
-        "board board"
-        "left right";
-      gap: 8px;
-    }
-    .col-board{grid-area:board; width:100%; flex-shrink:1}
-    .col-board #board{width:100%; height:auto; max-width:100%}
-    .col-left{grid-area:left; width:auto; min-width:0; max-height:60vh; overflow-y:auto}
-    .col-right{grid-area:right; width:auto; min-width:0; max-width:none; max-height:60vh; overflow-y:auto}
+    .game-layout{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"board board" "left right";gap:8px}
+    .col-board{grid-area:board;width:100%;flex-shrink:1}
+    .col-board #board{width:100%;height:auto;max-width:100%}
+    .col-left{grid-area:left;width:auto;min-width:0;max-height:60vh;overflow-y:auto}
+    .col-right{grid-area:right;width:auto;min-width:0;max-width:none;max-height:60vh;overflow-y:auto}
     .stat-grid{grid-template-columns:1fr}
     #logList{max-height:150px}
+    .header-box{max-width:calc(100vw - 20px);padding:20px 18px;}
   }
 
   @media(max-width:600px){
@@ -167,51 +168,41 @@
     .room-code{font-size:14px;letter-spacing:1px}
     .mode-tag{font-size:11px;padding:2px 8px}
     .mute-btn{padding:3px 8px;font-size:12px}
-    .collapse-status{font-size:12px}
-    .player-count{font-size:12px}
-    .lock-status{font-size:11px}
+    .collapse-status{font-size:12px}.player-count{font-size:12px}.lock-status{font-size:11px}
     .header-status{gap:8px}
-
     .panel{padding:8px;margin-bottom:6px}
     .panel h3{font-size:12px;margin-bottom:5px}
     .player-item{font-size:11px;padding:3px 0}
-    .my-status{font-size:12px;gap:6px}
-    .my-status .hp-big{font-size:14px}
+    .my-status{font-size:12px;gap:6px}.my-status .hp-big{font-size:14px}
     .hint{font-size:10px;line-height:1.4}
-
     .item-btn{padding:7px 10px;font-size:12px;margin:2px}
     .frag-btn{padding:6px 8px;font-size:11px;margin:2px}
-
     #logPanel{padding:8px;min-height:80px}
     #logPanel h3{font-size:11px;margin-bottom:4px}
     #logList{font-size:10px;line-height:1.3;max-height:100px}
-
     .spectate-banner,.waiting-banner{padding:6px 10px;font-size:11px;margin-bottom:6px}
-
     #gameOverPanel{padding:16px;margin:8px;max-width:calc(100vw - 16px);max-height:calc(100vh - 32px)}
     #gameOverPanel h2{font-size:22px}
     .rank-row{font-size:12px;padding:5px 8px}
     .rank-stats{font-size:10px;gap:6px}
-    .stat-grid{grid-template-columns:1fr}
-    .stat-item{font-size:12px;padding:4px 8px}
-
+    .stat-grid{grid-template-columns:1fr}.stat-item{font-size:12px;padding:4px 8px}
     .card{padding:20px 18px;max-width:calc(100vw - 20px)}
-    .header-box{max-width:calc(100vw - 20px);padding:20px 18px;}
     .room-list-panel{max-width:calc(100vw - 20px);padding:12px 14px}
-    #lobby h1{font-size:26px}
-    #lobby .sub{font-size:12px;margin-bottom:20px}
+    #lobby h1{font-size:26px}#lobby .sub{font-size:12px;margin-bottom:20px}
     .mode-btn{padding:10px 8px;font-size:12px}
-    .mode-btn .mode-name{font-size:13px}
-    .mode-btn .mode-desc{font-size:10px}
+    .mode-btn .mode-name{font-size:13px}.mode-btn .mode-desc{font-size:10px}
   }
 </style>
 </head>
 <body>
+<div id="bg-anim">
+  <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+</div>
 <div class="page">
   <div id="lobby">
     <div class="header-box">
       <h1>裂隙棋盘</h1>
-      <div class="sub">局域网联机 · v7</div>
+      <div class="sub">局域网联机 · v9</div>
       <div class="disclaimer">个人非商业项目 · 完全免费 · 不收取任何费用</div>
     </div>
     <div class="card">
@@ -223,12 +214,10 @@
         <label>游戏模式</label>
         <div class="mode-row">
           <button class="mode-btn active" data-mode="CLASSIC" id="modeClassic">
-            <span class="mode-name">经典模式</span>
-            <span class="mode-desc">全图 + 迷雾（桌面推荐）</span>
+            <span class="mode-name">经典模式</span><span class="mode-desc">全图 + 迷雾（桌面推荐）</span>
           </button>
           <button class="mode-btn" data-mode="FOG" id="modeFog">
-            <span class="mode-name">迷雾模式</span>
-            <span class="mode-desc">7×7 视窗（手机推荐）</span>
+            <span class="mode-name">迷雾模式</span><span class="mode-desc">7×7 视窗（手机推荐）</span>
           </button>
         </div>
       </div>
@@ -241,12 +230,9 @@
       <button id="joinBtn">加入房间</button>
       <div id="errorMsg"></div>
     </div>
-
     <div class="room-list-panel">
       <h3>可加入的房间 <span id="roomListCount"></span></h3>
-      <div class="room-list-body" id="roomListBody">
-        <div class="room-list-empty">暂无房间</div>
-      </div>
+      <div class="room-list-body" id="roomListBody"><div class="room-list-empty">暂无房间</div></div>
     </div>
   </div>
 
@@ -272,17 +258,14 @@
           <div id="itemList"><span style="color:#94a3b8;font-size:12px">空</span></div>
           <div class="hint" id="itemHint" style="margin-top:6px;display:none"></div>
           <div id="relicRow" style="margin-top:8px;display:none">
-            <span style="font-size:12px;color:#64748b">信物：</span>
-            <span class="relic-badge" id="relicBadge"></span>
+            <span style="font-size:12px;color:#64748b">信物：</span><span class="relic-badge" id="relicBadge"></span>
           </div>
         </div>
         <div id="logPanel">
-          <h3>日志</h3>
-          <div id="logList"></div>
+          <h3>日志</h3><div id="logList"></div>
         </div>
         <div id="playerPanel" class="panel">
-          <h3>玩家</h3>
-          <div id="playerList"></div>
+          <h3>玩家</h3><div id="playerList"></div>
         </div>
       </div>
       <div class="col-board" id="boardWrap">
@@ -291,19 +274,16 @@
       <div class="col-right">
         <div id="bigSidePanel">
           <div id="blessingPanel" class="panel" style="display:none;border:2px solid #7dd3fc">
-            <h3>🎁 选择祝福</h3>
-            <div id="blessingList"></div>
+            <h3>🎁 选择祝福</h3><div id="blessingList"></div>
           </div>
           <div id="relicPanel" class="panel" style="display:none;border:2px solid #c4b5fd">
-            <h3>📦 选择信物带回</h3>
-            <div id="relicList"></div>
+            <h3>📦 选择信物带回</h3><div id="relicList"></div>
           </div>
           <div class="panel">
             <h3>你的状态</h3>
             <div class="my-status">
               <span>生命</span><span class="hp-big" id="myHp">♥♥♥</span>
-              <span class="sh-big" id="myShields"></span>
-              <span class="sh-big" id="myFragments" style="color:#d97706"></span>
+              <span class="sh-big" id="myShields"></span><span class="sh-big" id="myFragments" style="color:#d97706"></span>
             </div>
             <div class="status-tags" id="statusTags"></div>
             <div class="cooldown-bar"><div id="cooldownBar" style="width:100%"></div></div>
@@ -320,12 +300,8 @@
         <div id="smallSidePanel" style="display:none">
           <div class="panel">
             <h3>小棋盘对决</h3>
-            <div class="small-score-row">
-              <span>你</span><span class="me-score" id="smallMyScore">0</span>
-            </div>
-            <div class="small-score-row">
-              <span id="smallOppName">对手</span><span class="opp-score" id="smallOppScore">0</span>
-            </div>
+            <div class="small-score-row"><span>你</span><span class="me-score" id="smallMyScore">0</span></div>
+            <div class="small-score-row"><span id="smallOppName">对手</span><span class="opp-score" id="smallOppScore">0</span></div>
             <div class="hint" style="margin-top:4px">先到 10 分或 60 秒高分者胜</div>
           </div>
           <div class="panel">
@@ -343,9 +319,7 @@
           <div class="panel">
             <h3>操作</h3>
             <div class="hint">
-              · 点相邻空格：移动 1 格<br>
-              · 点 2 格外直线格：冲刺<br>
-              · 点自己脚下：驻守（该点额外 +1）
+              · 点相邻空格：移动 1 格<br>· 点 2 格外直线格：冲刺<br>· 点自己脚下：驻守（该点额外 +1）
             </div>
           </div>
         </div>
@@ -362,12 +336,10 @@
     <h2 id="gameOverTitle">游戏结束</h2>
     <div class="winner-name" id="winnerName"></div>
     <div class="result-section">
-      <h3>最终排名</h3>
-      <div id="rankList"></div>
+      <h3>最终排名</h3><div id="rankList"></div>
     </div>
     <div class="result-section">
-      <h3>你的对局数据</h3>
-      <div class="stat-grid" id="statGrid"></div>
+      <h3>你的对局数据</h3><div class="stat-grid" id="statGrid"></div>
     </div>
     <div style="text-align:center;margin-top:16px">
       <button onclick="location.reload()">返回大厅</button>
@@ -388,7 +360,7 @@ const BIG_ITEM_DEFS = {
   'item_5': { glyph: '钥', name: '裂隙钥匙', desc: '下次裂隙等待减半，小棋盘多1道具', select: false },
   'item_6': { glyph: '医', name: '医疗包', desc: '恢复1点生命', select: false },
   'item_7': { glyph: '诱', name: '诱饵干扰器', desc: '周围7格内假广播5秒', select: false },
-  'item_8': { glyph: '乱', name: '失控干扰器', desc: '使周围3×3内其他玩家失控一回合（下次移动随机）', select: false }
+  'item_8': { glyph: '乱', name: '失控干扰器', desc: '使周围3×3内其他玩家失控一回合', select: false }
 };
 const SMALL_ITEM_DEFS = {
   push: { glyph: '推', name: '推挤', desc: '将对手沿最近控制点反方向推1格' },
@@ -398,17 +370,27 @@ const SMALL_ITEM_DEFS = {
   swap: { glyph: '换', name: '置换', desc: '与对手交换位置' }
 };
 
-/* ============ 音效 ============ */
+function hexToRgba(hex, alpha) {
+  if (!hex || hex[0] !== '#') return `rgba(59,130,246,${alpha})`;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 let audioCtx = null;
 let muted = localStorage.getItem('rift_muted') === '1';
 function initAudio() {
-  if (audioCtx) return;
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return;
+  }
   try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
 }
+
 const SOUND_DEFS = {
-  move: { freq: 600, dur: 0.05, type: 'square', vol: 0.08, throttle: true },
-  blocked: { freq: 180, dur: 0.1, type: 'square', vol: 0.08, throttle: true },
-  teleport: { freq: 900, dur: 0.28, type: 'triangle', vol: 0.12, slide: -650 },
+  move: { freq: 600, dur: 0.05, type: 'triangle', vol: 0.08, throttle: true },
+  teleport: { freq: 900, dur: 0.28, type: 'sine', vol: 0.12, slide: -650 },
   pickup: { freq: 880, dur: 0.08, type: 'sine', vol: 0.10, second: 1320, throttle: true },
   item: { freq: 520, dur: 0.12, type: 'triangle', vol: 0.08, throttle: true },
   collapseWarn: { freq: 1200, dur: 0.04, type: 'sine', vol: 0.04, throttle: true },
@@ -420,12 +402,14 @@ const SOUND_DEFS = {
   smallScore: { freq: 1000, dur: 0.06, type: 'sine', vol: 0.08, second: 1200, throttle: true },
   dash: { freq: 800, dur: 0.15, type: 'sine', vol: 0.08, slide: -400, throttle: true },
   hurt: { freq: 300, dur: 0.2, type: 'sawtooth', vol: 0.15, slide: -150 },
-  shield: { freq: 2000, dur: 0.08, type: 'square', vol: 0.15 },
+  shield: { freq: 2000, dur: 0.08, type: 'sine', vol: 0.15 },
   victory: { freq: 523, dur: 0.15, type: 'sine', vol: 0.15, second: 659, third: 784 },
   defeat: { freq: 400, dur: 0.2, type: 'sine', vol: 0.15, second: 200 },
-  blessing: { freq: 660, dur: 0.08, type: 'sine', vol: 0.15, second: 880, third: 1100 }
+  blessing: { freq: 660, dur: 0.08, type: 'sine', vol: 0.15, second: 880, third: 1100 },
+  blocked: { freq: 180, dur: 0.1, type: 'square', vol: 0.08, throttle: true }
 };
 const soundLastPlayed = {};
+
 function playTone(freq, dur, type, vol, slide) {
   if (!audioCtx || muted) return;
   try {
@@ -435,16 +419,28 @@ function playTone(freq, dur, type, vol, slide) {
     osc.type = type || 'sine';
     osc.frequency.setValueAtTime(freq, t);
     if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
-        // 检测是否为移动端（手机/平板），如果是则音量放大 3 倍
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const finalVol = Math.min(1.0, (vol || 0.1) * (isMobile ? 9.0 : 1.0));
     
-    gain.gain.setValueAtTime(finalVol, t);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const boost = isMobile ? 5.0 : 1.0;
+    
+    gain.gain.setValueAtTime((vol || 0.1) * boost, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    
+    if (isMobile) {
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-50, t);
+      compressor.knee.setValueAtTime(40, t);
+      compressor.ratio.setValueAtTime(12, t);
+      compressor.attack.setValueAtTime(0, t);
+      compressor.release.setValueAtTime(0.25, t);
+      osc.connect(gain); gain.connect(compressor); compressor.connect(audioCtx.destination);
+    } else {
+      osc.connect(gain); gain.connect(audioCtx.destination);
+    }
     osc.start(t); osc.stop(t + dur);
   } catch (e) {}
 }
+
 function playSound(id) {
   if (muted || !audioCtx) return;
   const def = SOUND_DEFS[id];
@@ -458,16 +454,7 @@ function playSound(id) {
   if (def.second) setTimeout(() => playTone(def.second, def.dur, def.type, def.vol * 0.9, 0), Math.round(def.dur * 600));
   if (def.third) setTimeout(() => playTone(def.third, def.dur, def.type, def.vol * 0.85, 0), Math.round(def.dur * 1200));
 }
-// 将 #xxxxxx 转为带透明度的 rgba
-function hexToRgba(hex, alpha) {
-  if (!hex || hex[0] !== '#') return `rgba(59,130,246,${alpha})`; // 兜底蓝
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
-/* ============ 动效 ============ */
 let effects = [];
 let effNow = 0;
 function addEffect(type, x, y, duration, data, layer) {
@@ -480,6 +467,7 @@ function addEffect(type, x, y, duration, data, layer) {
   if (effects.length >= 80) effects.shift();
   effects.push({ type, x, y, startAt: effNow, duration, data: data || {}, layer: layer || 'unit' });
 }
+
 function drawEffectsByLayer(layer, coordFn, ctx) {
   for (const e of effects) {
     if (e.layer !== layer) continue;
@@ -488,14 +476,15 @@ function drawEffectsByLayer(layer, coordFn, ctx) {
     drawEffect(e, progress, coordFn, ctx);
   }
 }
+
 function drawEffect(e, progress, coordFn, ctx) {
   const { x, y } = coordFn(e.x, e.y);
-    // ★ 新增：光轨牵引特效
+  
   if (e.type === 'movePath') {
     const dx = e.data.dx;
     const dy = e.data.dy;
-    const TS = e.data.ts || 45; 
-    const baseColor = e.data.color || '#3b82f6'; // 获取玩家颜色
+    const TS = e.data.ts || 45;
+    const baseColor = e.data.color || '#3b82f6';
     
     const startX = x - (dx * TS);
     const startY = y - (dy * TS);
@@ -505,9 +494,8 @@ function drawEffect(e, progress, coordFn, ctx) {
     const lineW = TS * 0.15; 
     const headR = TS * 0.2;
 
-    // 1. 绘制带有玩家颜色的发光主体
     ctx.shadowColor = hexToRgba(baseColor, 0.8); 
-    ctx.shadowBlur = 12; // 光晕范围稍微加大
+    ctx.shadowBlur = 12;
 
     ctx.strokeStyle = hexToRgba(baseColor, 1 - progress); 
     ctx.lineWidth = lineW;
@@ -517,33 +505,27 @@ function drawEffect(e, progress, coordFn, ctx) {
     ctx.lineTo(curX, curY);
     ctx.stroke();
     
-    // 2. 绘制前方的高亮白色光球
     ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
     ctx.beginPath();
     ctx.arc(curX, curY, headR, 0, Math.PI * 2);
     ctx.fill();
     
-    // 3. 绘制光轨上的“星星闪烁”拖尾
-    // 我们用预设的几个比例点，让光轨飞过时留下十字星光
     const starPoints = [0.3, 0.6, 0.9]; 
     starPoints.forEach(ratio => {
       if (progress > ratio) {
         const sx = startX + (dx * TS) * ratio;
         const sy = startY + (dy * TS) * ratio;
-        // 星星的透明度随时间变淡
         const starAlpha = (1 - progress) * 0.8;
         ctx.fillStyle = `rgba(255, 255, 255, ${starAlpha})`;
-        
-        // 画一个极简的十字星（两根细线交错）
         const starSize = TS * 0.15;
-        ctx.fillRect(sx - starSize, sy - 1, starSize * 2, 2); // 横
-        ctx.fillRect(sx - 1, sy - starSize, 2, starSize * 2); // 竖
+        ctx.fillRect(sx - starSize, sy - 1, starSize * 2, 2);
+        ctx.fillRect(sx - 1, sy - starSize, 2, starSize * 2);
       }
     });
     
     ctx.shadowBlur = 0; 
     ctx.lineCap = 'butt';
-    return; 
+    return;
   }
 
   if (e.type === 'dashTrail') {
@@ -620,7 +602,6 @@ function drawEffect(e, progress, coordFn, ctx) {
   }
 }
 
-/* ============ 状态 ============ */
 let myState = null;
 let prevState = null;
 let myId = null;
@@ -651,6 +632,9 @@ let prevDisoriented = false;
 let disorientedStartPos = null;
 let lastDisorientUpdate = 0;
 let localDisorientRemaining = 0;
+let visualPositions = {};
+let selectedBlessingId = null;
+let selectedRelicIdx = null;
 
 const lobby = document.getElementById('lobby');
 const gamePage = document.getElementById('gamePage');
@@ -729,10 +713,7 @@ function onJoined(res) {
   document.getElementById('roomCode').textContent = res.code;
 }
 
-/* ============ 房间列表 ============ */
-socket.on('rooms_list', list => {
-  renderRoomList(list || []);
-});
+socket.on('rooms_list', list => { renderRoomList(list || []); });
 
 function renderRoomList(list) {
   const key = list.map(r => r.code + ':' + r.total + ':' + r.humans).join('|');
@@ -770,14 +751,11 @@ roomListBody.addEventListener('pointerdown', e => {
   });
 });
 
-/* ============ 状态接收 ============ */
 let classicMobileHinted = false;
 socket.on('state', s => {
   if (!classicMobileHinted && s.mode === 'CLASSIC' && window.innerWidth < 700) {
     classicMobileHinted = true;
-    setTimeout(() => {
-      flashMessage('手机推荐用迷雾模式，格子更大更好点', 4000);
-    }, 800);
+    setTimeout(() => { flashMessage('手机推荐用迷雾模式，格子更大更好点', 4000); }, 800);
   }
   prevState = myState;
   myState = s;
@@ -799,9 +777,17 @@ socket.on('state', s => {
     smallNextTurnRemain = Math.max(0, s.small.nextTurnAt - s.small.serverNow);
     smallEndsRemain = Math.max(0, s.small.endsAt - s.small.serverNow);
   }
+  
+  if (!s.myPendingBlessing && selectedBlessingId) selectedBlessingId = null;
+  if (!s.myPendingRelic && selectedRelicIdx !== null) selectedRelicIdx = null;
+
   detectEvents(s);
   render();
   updatePanels();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') socket.emit('list_rooms', {});
 });
 
 function detectEvents(s) {
@@ -813,6 +799,7 @@ function detectEvents(s) {
     if (jumpDist > 1) {
       addEffect('teleportBurst', me.x, me.y, 500, null, 'unit');
       playSound('teleport');
+      visualPositions[me.id] = { x: me.x, y: me.y };
     }
   }
   if (me.alive && !me.waitingRiftId && !s.small) {
@@ -821,7 +808,6 @@ function detectEvents(s) {
     prevPos = null;
   }
 
-  // 失控状态变化
   if (s.myDisoriented && !prevDisoriented) {
     addEffect('disorientBurst', me.x, me.y, 600, null, 'unit');
     flashMessage('你被失控干扰了！下次移动方向随机', 2000);
@@ -833,6 +819,7 @@ function detectEvents(s) {
       addEffect('disorientBurst', me.x, me.y, 500, null, 'unit');
       playSound('move');
       flashMessage('失控：自动移动了一格', 1500);
+      visualPositions[me.id] = { x: me.x, y: me.y };
     } else {
       flashMessage('失控状态解除', 1500);
     }
@@ -887,6 +874,8 @@ function detectEvents(s) {
   if (s.small && !(prevState && prevState.small)) {
     addEffect('riftPulse', me.x, me.y, 300, { color: '#7c3aed' }, 'unit');
     playSound('riftMatch');
+    effects = [];
+    visualPositions = {};
   }
 
   if (s.small) {
@@ -907,6 +896,7 @@ function detectEvents(s) {
       }
     }
   } else {
+    if (prevState && prevState.small) effects = [];
     prevSmallTurnCount = -1;
     prevSmallMyScore = 0;
   }
@@ -925,11 +915,9 @@ function canSeeCell(x, y, s) {
   return v !== undefined && v >= 0;
 }
 
-/* ============ 渲染 ============ */
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
 const GRID_LINE = '#b0bccd';
-
 const TILE_NORMAL = 0, TILE_OBSTACLE = 1, TILE_RESOURCE = 2, TILE_TRANSPORT = 3, TILE_DANGER = 4, TILE_RUIN = 5, TILE_RIFT = 6;
 
 function resolveTileValue(v) {
@@ -962,15 +950,10 @@ function tileColor(tile, mode) {
 
 function getBigView() {
   const isFog = myState && myState.mode === 'FOG';
-  if (!isFog) {
-    return { vx: 0, vy: 0, vs: CONFIG.SIZE, ts: CONFIG.TILE };
-  }
+  if (!isFog) return { vx: 0, vy: 0, vs: CONFIG.SIZE, ts: CONFIG.TILE };
   const me = myState.players.find(p => p.isMe);
-  if (!me || me.x === undefined) {
-    return { vx: 0, vy: 0, vs: CONFIG.FOG_VIEW, ts: canvas.width / CONFIG.FOG_VIEW };
-  }
-  const vs = CONFIG.FOG_VIEW;
-  const half = Math.floor(vs / 2);
+  if (!me || me.x === undefined) return { vx: 0, vy: 0, vs: CONFIG.FOG_VIEW, ts: canvas.width / CONFIG.FOG_VIEW };
+  const vs = CONFIG.FOG_VIEW, half = Math.floor(vs / 2);
   const vx = Math.max(0, Math.min(CONFIG.SIZE - vs, me.x - half));
   const vy = Math.max(0, Math.min(CONFIG.SIZE - vs, me.y - half));
   return { vx, vy, vs, ts: canvas.width / vs };
@@ -978,16 +961,27 @@ function getBigView() {
 
 function screenToWorldBig(sx, sy) {
   const view = getBigView();
-  return {
-    x: view.vx + Math.floor(sx / view.ts),
-    y: view.vy + Math.floor(sy / view.ts)
-  };
+  return { x: view.vx + Math.floor(sx / view.ts), y: view.vy + Math.floor(sy / view.ts) };
 }
 
 function render() {
   if (!myState) return;
   effNow = performance.now();
   effects = effects.filter(e => effNow - e.startAt < e.duration);
+  
+  const now = Date.now();
+  for (const p of myState.players) {
+    if (p.x === undefined) continue;
+    if (!visualPositions[p.id]) visualPositions[p.id] = { x: p.x, y: p.y };
+    const vp = visualPositions[p.id];
+    if (vp.x !== p.x || vp.y !== p.y) {
+      vp.x += (p.x - vp.x) * 0.15;
+      vp.y += (p.y - vp.y) * 0.15;
+      if (Math.abs(p.x - vp.x) < 0.05) vp.x = p.x;
+      if (Math.abs(p.y - vp.y) < 0.05) vp.y = p.y;
+    }
+  }
+
   if (myState.small) renderSmallBoard();
   else renderBigBoard();
 }
@@ -1090,6 +1084,25 @@ function renderBigBoard() {
     }
   }
 
+  if (me && me.alive && !myState.small) {
+    const cdRemain = Math.max(0, (me.cooldownRemaining || 0) - (performance.now() - lastCooldownUpdate));
+    if (cdRemain <= 0) {
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [dx, dy] of dirs) {
+        const tx = me.x + dx, ty = me.y + dy;
+        if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
+        if (!isWalkableClient(tx, ty, me.id)) continue;
+        const px = (tx - view.vx) * TS, py = (ty - view.vy) * TS;
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.08)';
+        ctx.fillRect(px, py, TS, TS);
+        ctx.strokeStyle = 'rgba(34, 197, 94, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + 2, py + 2, TS - 4, TS - 4);
+        ctx.lineWidth = 1;
+      }
+    }
+  }
+
   if (myState.myInsightRemaining > 0) {
     for (const rift of myState.rifts) {
       const info = getTileValue(rift.x, rift.y);
@@ -1129,34 +1142,24 @@ function renderBigBoard() {
         const tx = me.x + dx, ty = me.y + dy;
         if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
         if (!isWalkableClient(tx, ty, me.id)) continue;
-        const px = (tx - view.vx) * TS;
-        const py = (ty - view.vy) * TS;
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([6, 4]);
+        const px = (tx - view.vx) * TS, py = (ty - view.vy) * TS;
+        ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
         ctx.strokeRect(px + 3, py + 3, TS - 6, TS - 6);
-        ctx.setLineDash([]);
-        ctx.lineWidth = 1;
+        ctx.setLineDash([]); ctx.lineWidth = 1;
       }
     } else if (pendingItemUse.itemId === 'item_1') {
-      // 传送：只高亮已探索且可通行落点
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         for (let d = 1; d <= 5; d++) {
           const tx = me.x + dx * d, ty = me.y + dy * d;
           if (tx < 0 || ty < 0 || tx >= CONFIG.SIZE || ty >= CONFIG.SIZE) break;
           const info = getTileValue(tx, ty);
-          if (!info || !info.explored) break; // 未探索，链路断
-          if (info.tile === TILE_OBSTACLE || info.tile === TILE_RUIN) break;
-          if (info.tile === TILE_RIFT) break;
+          if (!info || !info.explored || info.tile === TILE_OBSTACLE || info.tile === TILE_RUIN || info.tile === TILE_RIFT) break;
           if (myState.players.some(p => p.alive && !p.hidden && p.x === tx && p.y === ty)) break;
           if (myState.roadblocks.some(r => r.x === tx && r.y === ty)) break;
           if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
-          const px = (tx - view.vx) * TS;
-          const py = (ty - view.vy) * TS;
-          ctx.fillStyle = 'rgba(59,130,246,0.18)';
-          ctx.fillRect(px, py, TS, TS);
-          ctx.strokeStyle = 'rgba(59,130,246,0.5)';
-          ctx.strokeRect(px + 2, py + 2, TS - 4, TS - 4);
+          const px = (tx - view.vx) * TS, py = (ty - view.vy) * TS;
+          ctx.fillStyle = 'rgba(59,130,246,0.18)'; ctx.fillRect(px, py, TS, TS);
+          ctx.strokeStyle = 'rgba(59,130,246,0.5)'; ctx.strokeRect(px + 2, py + 2, TS - 4, TS - 4);
         }
       }
     } else if (pendingItemUse.itemId === 'item_4') {
@@ -1164,21 +1167,20 @@ function renderBigBoard() {
         const tx = me.x + dx, ty = me.y + dy;
         if (tx < view.vx || tx >= view.vx + view.vs || ty < view.vy || ty >= view.vy + view.vs) continue;
         if (!isValidRoadblockClient(tx, ty)) continue;
-        const px = (tx - view.vx) * TS;
-        const py = (ty - view.vy) * TS;
-        ctx.fillStyle = 'rgba(120,113,108,0.3)';
-        ctx.fillRect(px, py, TS, TS);
+        const px = (tx - view.vx) * TS, py = (ty - view.vy) * TS;
+        ctx.fillStyle = 'rgba(120,113,108,0.3)'; ctx.fillRect(px, py, TS, TS);
       }
     }
   }
 
   for (const p of myState.players) {
-    if (!p.alive) continue;
-    if (p.hidden) continue;
-    if (p.x === undefined || p.y === undefined) continue;
+    if (!p.alive || p.hidden || p.x === undefined) continue;
     if (p.x < view.vx || p.x >= view.vx + view.vs || p.y < view.vy || p.y >= view.vy + view.vs) continue;
-    const px = (p.x - view.vx) * TS + TS / 2;
-    const py = (p.y - view.vy) * TS + TS / 2;
+    
+    const vp = visualPositions[p.id] || p;
+    const px = (vp.x - view.vx) * TS + TS / 2;
+    const py = (vp.y - view.vy) * TS + TS / 2;
+    
     const pawnR = TS * 0.34;
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.beginPath(); ctx.arc(px + 1, py + 2, pawnR, 0, Math.PI * 2); ctx.fill();
@@ -1186,58 +1188,47 @@ function renderBigBoard() {
     ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.fill();
 
     if (p.isAI) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
       ctx.beginPath(); ctx.arc(px, py, pawnR + 1, 0, Math.PI * 2); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1;
+      ctx.setLineDash([]); ctx.lineWidth = 1;
     }
 
     const firstChar = Array.from(p.name)[0] || '?';
     ctx.fillStyle = '#fff';
     ctx.font = 'bold ' + Math.floor(TS * 0.38) + 'px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(firstChar, px, py + 1);
     ctx.textBaseline = 'alphabetic';
 
     if (p.isMe) {
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = '#1e3a8a';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(px, py, TS * 0.40, 0, Math.PI * 2); ctx.stroke();
       ctx.lineWidth = 1;
     }
     if ((p.winStreak || 0) >= 2) {
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(px, py, TS * 0.46, 0, Math.PI * 2); ctx.stroke();
       ctx.lineWidth = 1;
     }
     if (p.shields > 0) {
-      ctx.strokeStyle = '#c0c0c0';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#c0c0c0'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(px, py, TS * 0.42, 0, Math.PI * 2); ctx.stroke();
       ctx.lineWidth = 1;
     }
-    const w = TS * 0.65, hpR = p.hp / 3;
-    const barH = Math.max(4, TS * 0.08);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillRect(px - w / 2, py - TS * 0.48, w, barH);
+    const w = TS * 0.65, hpR = p.hp / 3, barH = Math.max(4, TS * 0.08);
+    ctx.fillStyle = '#e2e8f0'; ctx.fillRect(px - w / 2, py - TS * 0.48, w, barH);
     ctx.fillStyle = hpR > 0.6 ? '#16a34a' : hpR > 0.3 ? '#ca8a04' : '#dc2626';
     ctx.fillRect(px - w / 2, py - TS * 0.48, w * Math.max(0, hpR), barH);
     if (p.shields > 0) {
-      ctx.fillStyle = 'rgba(192,192,192,0.6)';
-      ctx.fillRect(px - w / 2, py - TS * 0.48, w, barH);
+      ctx.fillStyle = 'rgba(192,192,192,0.6)'; ctx.fillRect(px - w / 2, py - TS * 0.48, w, barH);
     }
     ctx.fillStyle = '#0f172a';
     ctx.font = 'bold ' + Math.max(10, Math.floor(TS * 0.20)) + 'px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText(p.name, px, py - TS * 0.58);
-        if (p.disoriented) {
+    if (p.disoriented) {
       ctx.fillStyle = '#dc2626';
       ctx.font = 'bold ' + Math.floor(TS * 0.32) + 'px system-ui';
       ctx.textAlign = 'center';
@@ -1249,6 +1240,13 @@ function renderBigBoard() {
   drawEffectsByLayer('ui', bigCoord, ctx);
 
   if (isFog) {
+    const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, TS * 1.5, canvas.width/2, canvas.height/2, TS * 3.5);
+    grad.addColorStop(0, 'rgba(10,10,18,0)');
+    grad.addColorStop(0.6, 'rgba(10,10,18,0.6)');
+    grad.addColorStop(1, 'rgba(10,10,18,0.95)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 4;
     ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
@@ -1331,17 +1329,14 @@ function renderSmallBoard() {
     const px = offX + bd.x * TS, py = offY + bd.y * TS;
     ctx.fillStyle = 'rgba(75,85,99,0.45)';
     ctx.fillRect(px, py, TS, TS);
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#374151'; ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(px + 8, py + 8); ctx.lineTo(px + TS - 8, py + TS - 8);
     ctx.moveTo(px + TS - 8, py + 8); ctx.lineTo(px + 8, py + TS - 8);
     ctx.stroke();
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#1f2937';
-    ctx.font = 'bold 24px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#1f2937'; ctx.font = 'bold 24px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('锁', px + TS / 2, py + TS / 2);
     ctx.textBaseline = 'alphabetic';
   }
@@ -1354,31 +1349,21 @@ function renderSmallBoard() {
     else if (cp.owner === 'b') ctx.fillStyle = 'rgba(220,38,38,0.15)';
     else ctx.fillStyle = 'rgba(156,163,175,0.1)';
     ctx.fillRect(px, py, TS, TS);
-    ctx.strokeStyle = ownerColor;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(px + TS / 2, py + TS / 2, TS * 0.25, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.strokeStyle = ownerColor; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.25, 0, Math.PI * 2); ctx.stroke();
     ctx.lineWidth = 1;
     if (block) {
       const bc = block.owner === 'a' ? '#2563eb' : '#dc2626';
-      ctx.fillStyle = bc;
-      ctx.font = 'bold 26px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.fillStyle = bc; ctx.font = 'bold 26px system-ui';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('封', px + TS / 2, py + TS / 2);
       ctx.textBaseline = 'alphabetic';
-      ctx.strokeStyle = bc;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 3]);
+      ctx.strokeStyle = bc; ctx.lineWidth = 2; ctx.setLineDash([6, 3]);
       ctx.strokeRect(px + 3, py + 3, TS - 6, TS - 6);
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1;
+      ctx.setLineDash([]); ctx.lineWidth = 1;
     } else {
-      ctx.fillStyle = ownerColor;
-      ctx.font = 'bold 20px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.fillStyle = ownerColor; ctx.font = 'bold 20px system-ui';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('★', px + TS / 2, py + TS / 2);
       ctx.textBaseline = 'alphabetic';
     }
@@ -1389,17 +1374,12 @@ function renderSmallBoard() {
     const py = offY + it.y * TS + TS / 2;
     const r = TS * 0.28;
     roundRect(px - r, py - r, r * 2, r * 2, 7);
-    ctx.fillStyle = '#fbbf24';
-    ctx.fill();
-    ctx.strokeStyle = '#92400e';
-    ctx.lineWidth = 2;
-    roundRect(px - r, py - r, r * 2, r * 2, 7);
-    ctx.stroke();
+    ctx.fillStyle = '#fbbf24'; ctx.fill();
+    ctx.strokeStyle = '#92400e'; ctx.lineWidth = 2;
+    roundRect(px - r, py - r, r * 2, r * 2, 7); ctx.stroke();
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#7c2d12';
-    ctx.font = 'bold 22px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#7c2d12'; ctx.font = 'bold 22px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const def = SMALL_ITEM_DEFS[it.type];
     ctx.fillText(def ? def.glyph : '?', px, py);
     ctx.textBaseline = 'alphabetic';
@@ -1410,17 +1390,12 @@ function renderSmallBoard() {
     const py = offY + sm.myTrap.pos.y * TS + TS / 2;
     const r = TS * 0.24;
     roundRect(px - r, py - r, r * 2, r * 2, 7);
-    ctx.fillStyle = '#fee2e2';
-    ctx.fill();
-    ctx.strokeStyle = '#dc2626';
-    ctx.lineWidth = 2;
-    roundRect(px - r, py - r, r * 2, r * 2, 7);
-    ctx.stroke();
+    ctx.fillStyle = '#fee2e2'; ctx.fill();
+    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2;
+    roundRect(px - r, py - r, r * 2, r * 2, 7); ctx.stroke();
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#dc2626';
-    ctx.font = 'bold 20px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#dc2626'; ctx.font = 'bold 20px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('陷', px, py);
     ctx.textBaseline = 'alphabetic';
   }
@@ -1428,35 +1403,27 @@ function renderSmallBoard() {
   if (sm.myInput && !sm.inObserve) {
     if (sm.myInput.type === 'hold') {
       const px = offX + sm.myPos.x * TS, py = offY + sm.myPos.y * TS;
-      ctx.strokeStyle = '#16a34a';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([8, 4]);
+      ctx.strokeStyle = '#16a34a'; ctx.lineWidth = 3; ctx.setLineDash([8, 4]);
       ctx.strokeRect(px + 3, py + 3, TS - 6, TS - 6);
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1;
-      ctx.fillStyle = '#16a34a';
-      ctx.font = 'bold 22px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.setLineDash([]); ctx.lineWidth = 1;
+      ctx.fillStyle = '#16a34a'; ctx.font = 'bold 22px system-ui';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('守', px + TS / 2, py + TS / 2);
       ctx.textBaseline = 'alphabetic';
     } else if (sm.myInput.target) {
       if (sm.myInput.type === 'dash') {
         const dx = sm.myInput.target.x - sm.myPos.x;
         const dy = sm.myInput.target.y - sm.myPos.y;
-        const midX = sm.myPos.x + dx / 2, midY = sm.myPos.y + dy / 2;
-        const mpx = offX + midX * TS, mpy = offY + midY * TS;
-        ctx.fillStyle = 'rgba(245,158,11,0.35)';
-        ctx.fillRect(mpx, mpy, TS, TS);
+        const mpx = offX + (sm.myPos.x + dx / 2) * TS;
+        const mpy = offY + (sm.myPos.y + dy / 2) * TS;
+        ctx.fillStyle = 'rgba(245,158,11,0.35)'; ctx.fillRect(mpx, mpy, TS, TS);
       }
       const tx = offX + sm.myInput.target.x * TS;
       const ty = offY + sm.myInput.target.y * TS;
       ctx.strokeStyle = sm.myInput.type === 'dash' ? '#f59e0b' : '#3b82f6';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([8, 4]);
+      ctx.lineWidth = 3; ctx.setLineDash([8, 4]);
       ctx.strokeRect(tx + 3, ty + 3, TS - 6, TS - 6);
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1;
+      ctx.setLineDash([]); ctx.lineWidth = 1;
     }
   }
 
@@ -1471,18 +1438,26 @@ function renderSmallBoard() {
   const bOwn = sm.controlPoints.filter(c => c.owner === 'b').length;
   const myOwn = sm.mySide === 'a' ? aOwn : bOwn;
   const oppOwn = sm.mySide === 'a' ? bOwn : aOwn;
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 20px system-ui';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#0f172a'; ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center';
   const oppLabel = sm.oppName + (sm.oppIsAI ? '（AI）' : '');
   ctx.fillText('你 ' + sm.myScore + ' (' + myOwn + '点)   :   ' + oppLabel + ' ' + sm.oppScore + ' (' + oppOwn + '点)', canvas.width / 2, offY - 20);
 
   const endsRemain = Math.max(0, smallEndsRemain - (performance.now() - lastSmallUpdate));
   const remainSec = Math.ceil(endsRemain / 1000);
-  ctx.fillStyle = remainSec > 10 ? '#2563eb' : '#dc2626';
-  ctx.font = 'bold 18px system-ui';
-  ctx.textAlign = 'center';
-  ctx.fillText('剩余 ' + remainSec + 's · 先到 10 分', canvas.width / 2, offY + TS * size + 30);
+  
+  if (remainSec <= 10) {
+    const pulse = 1 + Math.sin(Date.now() / 100) * 0.1;
+    ctx.save();
+    ctx.translate(canvas.width / 2, offY + TS * size + 30);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 20px system-ui';
+    ctx.fillText('剩余 ' + remainSec + 's · 先到 10 分', 0, 0);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = '#2563eb'; ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('剩余 ' + remainSec + 's · 先到 10 分', canvas.width / 2, offY + TS * size + 30);
+  }
 
   drawEffectsByLayer('ui', smallCoord, ctx);
 
@@ -1491,15 +1466,11 @@ function renderSmallBoard() {
     const obsSec = Math.ceil(obsRemain / 1000);
     ctx.fillStyle = 'rgba(15,23,42,0.55)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 34px system-ui';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 34px system-ui'; ctx.textAlign = 'center';
     ctx.fillText('观察期', canvas.width / 2, canvas.height / 2 - 20);
-    ctx.font = 'bold 26px system-ui';
-    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 26px system-ui'; ctx.fillStyle = '#fbbf24';
     ctx.fillText(obsSec + 's 后可操作', canvas.width / 2, canvas.height / 2 + 24);
-    ctx.font = '14px system-ui';
-    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '14px system-ui'; ctx.fillStyle = '#cbd5e1';
     ctx.fillText('观察双方位置、控制点归属与道具分布', canvas.width / 2, canvas.height / 2 + 60);
   }
 }
@@ -1520,17 +1491,11 @@ function drawSmallPawn(px, py, color, label, isMe, isAI) {
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(px, py, TS * 0.3, 0, Math.PI * 2); ctx.fill();
   if (isAI) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
     ctx.beginPath(); ctx.arc(px, py, TS * 0.3 + 1, 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.lineWidth = 1;
+    ctx.setLineDash([]); ctx.lineWidth = 1;
   }
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 18px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(isMe ? '你' : (isAI ? 'AI' : '敌'), px, py);
   ctx.textBaseline = 'alphabetic';
 }
@@ -1539,7 +1504,14 @@ function getMyColor() {
   return me ? me.color : '#2563eb';
 }
 
-/* ============ HUD ============ */
+function myCooldownRemaining() {
+  if (!myState) return 0;
+  const me = myState.players.find(p => p.isMe);
+  if (!me || me.cooldownRemaining === undefined) return 0;
+  const elapsed = performance.now() - lastCooldownUpdate;
+  return Math.max(0, me.cooldownRemaining - elapsed);
+}
+
 function updatePanels() {
   if (!myState) return;
   const me = myState.players.find(p => p.isMe);
@@ -1677,27 +1649,37 @@ function renderBigItems(me) {
 
 function renderBlessing(me) {
   const pb = myState.myPendingBlessing;
-  const key = pb ? pb.options.map(o => o.id).join(',') : '';
-  if (key === lastBlessingKey) return;
-  lastBlessingKey = key;
   if (!pb) { blessingPanel.style.display = 'none'; return; }
   blessingPanel.style.display = 'block';
-  document.getElementById('blessingList').innerHTML = pb.options.map(o =>
-    `<div class="blessing-card" data-blessing-id="${o.id}"><b>${escapeHtml(o.name)}</b>${escapeHtml(o.desc)}</div>`
-  ).join('');
+  
+  const key = pb.options.map(o => o.id).join(',') + '|' + selectedBlessingId;
+  if (key !== lastBlessingKey) {
+    lastBlessingKey = key;
+    document.getElementById('blessingList').innerHTML = pb.options.map(o => {
+      const isSelected = selectedBlessingId === o.id;
+      return `<div class="blessing-card ${isSelected ? 'confirm-wait' : ''}" data-blessing-id="${o.id}">
+        <b>${escapeHtml(o.name)} ${isSelected ? '（再次点击确认）' : ''}</b>${escapeHtml(o.desc)}
+      </div>`;
+    }).join('');
+  }
 }
 
 function renderRelic(me) {
   const pr = myState.myPendingRelic;
-  const key = pr ? pr.join(',') : '';
-  if (key === lastRelicKey) return;
-  lastRelicKey = key;
   if (!pr || pr.length === 0) { relicPanel.style.display = 'none'; return; }
   relicPanel.style.display = 'block';
-  document.getElementById('relicList').innerHTML = pr.map((it, i) => {
-    const def = SMALL_ITEM_DEFS[it] || { glyph: '?', name: '?' };
-    return `<div class="blessing-card" data-relic-idx="${i}" style="border-color:#c4b5fd"><b>${def.glyph} ${escapeHtml(def.name)}</b>${escapeHtml(def.desc || '')}</div>`;
-  }).join('');
+  
+  const key = pr.join(',') + '|' + selectedRelicIdx;
+  if (key !== lastRelicKey) {
+    lastRelicKey = key;
+    document.getElementById('relicList').innerHTML = pr.map((it, i) => {
+      const def = SMALL_ITEM_DEFS[it] || { glyph: '?', name: '?' };
+      const isSelected = selectedRelicIdx === i;
+      return `<div class="blessing-card ${isSelected ? 'confirm-wait' : ''}" data-relic-idx="${i}" style="border-color:#c4b5fd">
+        <b>${def.glyph} ${escapeHtml(def.name)} ${isSelected ? '（再次点击确认）' : ''}</b>${escapeHtml(def.desc || '')}
+      </div>`;
+    }).join('');
+  }
 }
 
 function renderFragExchange(me) {
@@ -1807,25 +1789,17 @@ function updateDisorientTag() {
   if (el.textContent !== String(sec)) el.textContent = sec;
 }
 
-function myCooldownRemaining() {
-  if (!myState) return 0;
-  const me = myState.players.find(p => p.isMe);
-  if (!me || me.cooldownRemaining === undefined) return 0;
-  const elapsed = performance.now() - lastCooldownUpdate;
-  return Math.max(0, me.cooldownRemaining - elapsed);
-}
-
 function tickCooldown() {
   if (!myState) return;
+  updateDisorientTag();
+  
   const me = myState.players.find(p => p.isMe);
   if (!me) return;
-  updateDisorientTag();
+
   if (myState.small) {
     const elapsed = performance.now() - lastSmallUpdate;
     const nextRemain = Math.max(0, smallNextTurnRemain - elapsed);
-    const endsRemain = Math.max(0, smallEndsRemain - elapsed);
     document.getElementById('smallTurnBar').style.width = Math.max(0, Math.min(100, (1 - nextRemain / 3000) * 100)) + '%';
-    document.getElementById('smallEndsText').textContent = '剩余 ' + Math.ceil(endsRemain / 1000) + 's';
     return;
   }
 
@@ -1858,7 +1832,6 @@ function loopRender() {
 }
 requestAnimationFrame(loopRender);
 
-/* ============ 输入 ============ */
 function onBigItemClick(idx) {
   if (!myState) return;
   const me = myState.players.find(p => p.isMe);
@@ -1873,6 +1846,7 @@ function onBigItemClick(idx) {
   const remaining = (me.cooldownRemaining || 0) - elapsed;
   if (itemId !== 'item_0' && remaining > 0) {
     flashMessage('冷却中，无法使用道具');
+    playSound('blocked');
     return;
   }
   if (pendingItemUse && pendingItemUse.itemIdx === idx) {
@@ -1887,7 +1861,7 @@ function onBigItemClick(idx) {
   }
   socket.emit('use_item', { itemIdx: idx }, res => {
     if (res && res.ok) playSound('item');
-    else if (res && !res.ok) flashMessage(res.error || '使用失败');
+    else if (res && !res.ok) { flashMessage(res.error || '使用失败'); playSound('blocked'); }
   });
 }
 function onSmallItemClick(idx) {
@@ -1897,7 +1871,7 @@ function onSmallItemClick(idx) {
   if (idx < 0 || idx >= sm.myItems.length) return;
   socket.emit('small_action', { type: 'item', itemIdx: idx }, res => {
     if (res && res.ok) playSound('item');
-    else if (res && !res.ok) flashMessage(res.error || '操作失败');
+    else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
   });
 }
 
@@ -1911,26 +1885,40 @@ document.addEventListener('pointerdown', e => {
     e.preventDefault();
     socket.emit('fragment_exchange', { idx: parseInt(fbtn.dataset.fragIdx) }, res => {
       if (res && res.ok) playSound('pickup');
-      else if (res && !res.ok) flashMessage(res.error || '兑换失败');
+      else if (res && !res.ok) { flashMessage(res.error || '兑换失败'); playSound('blocked'); }
     });
     return;
   }
   const bbtn = e.target.closest('[data-blessing-id]');
   if (bbtn) {
     e.preventDefault();
-    socket.emit('choose_blessing', { id: bbtn.dataset.blessingId }, res => {
-      if (res && res.ok) playSound('blessing');
-      else if (res && !res.ok) flashMessage(res.error || '选择失败');
-    });
+    const id = bbtn.dataset.blessingId;
+    if (selectedBlessingId !== id) {
+      selectedBlessingId = id;
+      updatePanels();
+    } else {
+      selectedBlessingId = null;
+      socket.emit('choose_blessing', { id }, res => {
+        if (res && res.ok) playSound('blessing');
+        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blocked'); }
+      });
+    }
     return;
   }
   const rbtn = e.target.closest('[data-relic-idx]');
   if (rbtn) {
     e.preventDefault();
-    socket.emit('choose_relic', { idx: parseInt(rbtn.dataset.relicIdx) }, res => {
-      if (res && res.ok) playSound('pickup');
-      else if (res && !res.ok) flashMessage(res.error || '选择失败');
-    });
+    const idx = parseInt(rbtn.dataset.relicIdx);
+    if (selectedRelicIdx !== idx) {
+      selectedRelicIdx = idx;
+      updatePanels();
+    } else {
+      selectedRelicIdx = null;
+      socket.emit('choose_relic', { idx }, res => {
+        if (res && res.ok) playSound('pickup');
+        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blocked'); }
+      });
+    }
     return;
   }
 });
@@ -1956,23 +1944,19 @@ window.addEventListener('keydown', e => {
   if (d) {
     e.preventDefault();
     pendingItemUse = null;
-    const meK = myState ? myState.players.find(p => p.isMe) : null;
-    if (meK && meK.alive && !meK.waitingRiftId && !myState.small && myCooldownRemaining() > 0) {
-      playSound('blocked');
-      flashMessage('冷却中，还不能移动');
-      return;
-    }
     const me = myState ? myState.players.find(p => p.isMe) : null;
     if (me && me.alive && me.x !== undefined && !me.waitingRiftId && !myState.small) {
       const nx = me.x + d[0], ny = me.y + d[1];
       const info = getTileValue(nx, ny);
       if (!(info && info.tile === TILE_RIFT)) playSound('move');
+      addEffect('movePath', nx, ny, 300, { dx: d[0], dy: d[1], ts: CONFIG.TILE, color: me.color }, 'terrain');
     }
     socket.emit('move', { dx: d[0], dy: d[1] }, res => {
-      if (res && !res.ok && res.error) flashMessage(res.error);
+      if (res && !res.ok && res.error) { flashMessage(res.error); playSound('blocked'); }
       if (res && res.ok && res.disoriented) {
         flashMessage('失控：移动方向被随机改变', 1500);
         disorientedStartPos = null;
+        visualPositions[myId] = { x: 0, y: 0 };
       }
     });
   }
@@ -2006,7 +1990,7 @@ canvas.addEventListener('click', e => {
       if (sm.myStunned || sm.myDashPenalty) { flashMessage('本回合被定身，无法驻守'); return; }
       socket.emit('small_action', { type: 'hold' }, res => {
         if (res && res.ok) playSound('smallTurn');
-        else if (res && !res.ok) flashMessage(res.error || '操作失败');
+        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
       });
       return;
     }
@@ -2020,7 +2004,7 @@ canvas.addEventListener('click', e => {
       if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); return; }
       socket.emit('small_action', { type: 'move', target: { x, y } }, res => {
         if (res && res.ok) playSound('smallTurn');
-        else if (res && !res.ok) flashMessage(res.error || '操作失败');
+        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
       });
     } else if (d === 2 && (dx === 0 || dy === 0)) {
       if (sm.myDashPenalty) { flashMessage('冲刺惩罚中'); return; }
@@ -2029,7 +2013,7 @@ canvas.addEventListener('click', e => {
       if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); return; }
       socket.emit('small_action', { type: 'dash', target: { x, y } }, res => {
         if (res && res.ok) playSound('dash');
-        else if (res && !res.ok) flashMessage(res.error || '操作失败');
+        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
       });
     } else {
       flashMessage('只能移动1格或直线冲刺2格');
@@ -2051,29 +2035,26 @@ canvas.addEventListener('click', e => {
         else playSound('item');
       } else if (res && !res.ok) {
         flashMessage(res.error || '使用失败');
+        playSound('blocked');
       }
     });
     return;
   }
   const dx = x - me.x, dy = y - me.y;
   if (Math.abs(dx) + Math.abs(dy) !== 1) return;
-  if (myCooldownRemaining() > 0) {
-  playSound('blocked');
-  flashMessage('冷却中，还不能移动');
-  return;
+  
+  const info = getTileValue(x, y);
+  if (!(info && info.tile === TILE_RIFT)) {
+    playSound('move');
+    addEffect('movePath', x, y, 300, { dx: dx, dy: dy, ts: CONFIG.TILE, color: me.color }, 'terrain');
   }
-  // ★ 新增：点击瞬间发射光轨！
-  addEffect('movePath', x, y, 300, { dx: dx, dy: dy, ts: CONFIG.TILE, color: me.color }, 'terrain');
   
-  // 音效先播，给出即时反馈
-  playSound('move');
-  
-  // 发送移动指令
   socket.emit('move', { dx, dy }, res => {
-    if (res && !res.ok && res.error) flashMessage(res.error);
+    if (res && !res.ok && res.error) { flashMessage(res.error); playSound('blocked'); }
     if (res && res.ok && res.disoriented) {
       flashMessage('失控：移动方向被随机改变', 1500);
       disorientedStartPos = null;
+      visualPositions[myId] = { x: 0, y: 0 };
     }
   });
 });
@@ -2129,7 +2110,7 @@ canvas.addEventListener('mousemove', e => {
 });
 canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
-document.addEventListener('pointerdown', initAudio, { once: true });
+document.addEventListener('pointerdown', initAudio, { once: false });
 </script>
 </body>
 </html>

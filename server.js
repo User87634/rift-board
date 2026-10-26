@@ -903,7 +903,8 @@ function computeRankings(room) {
   return all.map((p, i) => ({
     rank: i + 1, id: p.id, name: p.name, color: p.color, isAI: !!p.isAI, alive: p.alive, hp: p.hp, fragments: p.fragments || 0, items: p.items.length,
     smallWins: p.stats.smallWins || 0, smallLosses: p.stats.smallLosses || 0, damageTaken: p.stats.damageTaken || 0, pickups: p.stats.pickups || 0,
-    itemsUsed: p.stats.itemsUsed || 0, riftEnters: p.stats.riftEnters || 0, killReason: p.stats.killReason || null, aliveTime: Math.round(((p.alive ? now : (p.stats.deadAt || now)) - room.createdAt) / 1000)
+    itemsUsed: p.stats.itemsUsed || 0, riftEnters: p.stats.riftEnters || 0, killReason: p.stats.killReason || null, 
+    aliveTime: Math.max(0, Math.round(((p.alive ? now : (p.stats.deadAt || now)) - (p.joinAt || room.createdAt)) / 1000))
   }));
 }
 
@@ -914,6 +915,7 @@ function createAIPlayer(room, aiIdx) {
   if (!name) name = 'AI-' + (aiIdx + 1);
   return {
     id: 'ai_' + aiIdx, socketId: null, isAI: true, name, color: AI_COLORS[aiIdx % AI_COLORS.length], x: spawn.x, y: spawn.y, hp: CONFIG.HP, shields: 0, alive: true,
+    joinAt: Date.now(),
     items: [], fragments: 0, relic: null, winStreak: 0, lossStreak: 0, pendingBlessing: null, pendingRelic: null, riftHints: [], waitingRiftId: null, riftKeyBuff: false,
     riftKeyPendingItem: false, riftRushBuff: false, riftRushPendingScore: false, harvestBuff: false, insightUntil: 0, scanUntil: 0, visionBuffUntil: 0, fatigueUntil: 0, exposedUntil: 0,
     disoriented: false, disorientedUntil: 0, hpRestoredThisGame: false, relicExchangedThisGame: false, lastRiftAt: 0, lastScoreAt: 0, nextActionAt: 0, lastDangerDmg: 0,
@@ -1090,7 +1092,7 @@ function joinRoom(room, socket, name) {
 
   const player = {
     id, socketId: socket.id, isAI: false, name: safeName, color: myColor, x: spawn.x, y: spawn.y, hp: CONFIG.HP, shields: 0, alive: true,
-    // ... 下面那一大堆属性原封不动保留
+    joinAt: Date.now(),
     items: [], fragments: 0, relic: null, winStreak: 0, lossStreak: 0, pendingBlessing: null, pendingRelic: null, riftHints: [], waitingRiftId: null, riftKeyBuff: false,
     riftKeyPendingItem: false, riftRushBuff: false, riftRushPendingScore: false, harvestBuff: false, insightUntil: 0, scanUntil: 0, visionBuffUntil: 0, fatigueUntil: 0, exposedUntil: 0,
     disoriented: false, disorientedUntil: 0, hpRestoredThisGame: false, relicExchangedThisGame: false, lastRiftAt: 0, lastScoreAt: 0, nextActionAt: 0, lastDangerDmg: 0,
