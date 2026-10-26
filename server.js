@@ -1082,8 +1082,15 @@ function joinRoom(room, socket, name) {
   const idx = room.playerCounter++, spawn = findSpawn(room);
   const safeName = (typeof name === 'string' ? name.trim().slice(0, 8) : '') || NAMES[idx] || ('玩家' + (idx + 1));
   const ip = getClientIpSocket(socket);
+  
+  // ★ 新增：计算没被占用的颜色
+  const usedColors = [...room.players.values()].map(p => p.color);
+  const availableColors = COLORS.filter(c => !usedColors.includes(c));
+  const myColor = availableColors.length > 0 ? pick(availableColors) : pick(COLORS);
+
   const player = {
-    id, socketId: socket.id, isAI: false, name: safeName, color: COLORS[idx] || '#888', x: spawn.x, y: spawn.y, hp: CONFIG.HP, shields: 0, alive: true,
+    id, socketId: socket.id, isAI: false, name: safeName, color: myColor, x: spawn.x, y: spawn.y, hp: CONFIG.HP, shields: 0, alive: true,
+    // ... 下面那一大堆属性原封不动保留
     items: [], fragments: 0, relic: null, winStreak: 0, lossStreak: 0, pendingBlessing: null, pendingRelic: null, riftHints: [], waitingRiftId: null, riftKeyBuff: false,
     riftKeyPendingItem: false, riftRushBuff: false, riftRushPendingScore: false, harvestBuff: false, insightUntil: 0, scanUntil: 0, visionBuffUntil: 0, fatigueUntil: 0, exposedUntil: 0,
     disoriented: false, disorientedUntil: 0, hpRestoredThisGame: false, relicExchangedThisGame: false, lastRiftAt: 0, lastScoreAt: 0, nextActionAt: 0, lastDangerDmg: 0,
