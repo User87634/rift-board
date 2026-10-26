@@ -437,7 +437,7 @@ function playTone(freq, dur, type, vol, slide) {
     if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
         // 检测是否为移动端（手机/平板），如果是则音量放大 3 倍
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const finalVol = Math.min(1.0, (vol || 0.1) * (isMobile ? 3.0 : 1.0));
+    const finalVol = Math.min(1.0, (vol || 0.1) * (isMobile ? 9.0 : 1.0));
     
     gain.gain.setValueAtTime(finalVol, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
