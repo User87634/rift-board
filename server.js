@@ -665,15 +665,28 @@ function smallAI(sm, side) {
   const selfItemsKey = side === 'a' ? 'aItems' : 'bItems', selfScoreKey = side === 'a' ? 'aScore' : 'bScore', oppScoreKey = side === 'a' ? 'bScore' : 'aScore';
   const self = sm[selfKey], opp = sm[oppKey], items = sm[selfItemsKey];
   const canMove = !(sm[side === 'a' ? 'aStunned' : 'bStunned'] || sm[side === 'a' ? 'aDashPenalty' : 'bDashPenalty'] || sm[side === 'a' ? 'aHoldPenalty' : 'bHoldPenalty']);
+  const scoreDiff = sm[selfScoreKey] - sm[oppScoreKey];
+  
   if (!canMove) {
     const stealIdx = items.indexOf('steal'); if (stealIdx >= 0 && sm[oppScoreKey] > 0) return { type: 'item', itemIdx: stealIdx };
     const blockIdx = items.indexOf('block'); if (blockIdx >= 0) return { type: 'item', itemIdx: blockIdx };
     const trapIdx = items.indexOf('trap'); if (trapIdx >= 0) return { type: 'item', itemIdx: trapIdx };
     return { type: 'idle' };
   }
+  
   const onOwnCp = sm.controlPoints.find(cp => cp.owner === side && smallSamePos(cp, self));
-  const behind = sm[selfScoreKey] < sm[oppScoreKey];
-  if (onOwnCp && !behind && !sm[side === 'a' ? 'aHoldPenalty' : 'bHoldPenalty'] && Math.random() < 0.4) return { type: 'hold' };
+  const isWinning = scoreDiff >= 3 || (sm[selfScoreKey] >= 8 && scoreDiff > 0);
+  const isLosing = scoreDiff <= -2;
+  
+  if (isWinning && onOwnCp && !sm[side === 'a' ? 'aHoldPenalty' : 'bHoldPenalty'] && Math.random() < 0.8) {
+    return { type: 'hold' };
+  }
+  
+  const stealIdx = items.indexOf('steal');
+  if (stealIdx >= 0 && sm[oppScoreKey] > 0) {
+    if (isLosing || Math.random() < 0.3) return { type: 'item', itemIdx: stealIdx };
+  }
+  
   const targetCp = (() => {
     let best = null, bestD = 99;
     for (const cp of sm.controlPoints) {
@@ -684,13 +697,16 @@ function smallAI(sm, side) {
     }
     return best;
   })();
-  const target = targetCp || opp;
-  const stealIdx = items.indexOf('steal'); if (stealIdx >= 0 && sm[oppScoreKey] > 0 && Math.random() < 0.5) return { type: 'item', itemIdx: stealIdx };
+  
+  const target = targetCp || (isWinning ? self : opp);
+  
   if (targetCp && smallSamePos(targetCp, opp)) {
-    const pushIdx = items.indexOf('push'); if (pushIdx >= 0 && Math.random() < 0.4) return { type: 'item', itemIdx: pushIdx };
+    const pushIdx = items.indexOf('push'); if (pushIdx >= 0 && Math.random() < 0.5) return { type: 'item', itemIdx: pushIdx };
   }
+  
   const dx = target.x - self.x, dy = target.y - self.y, options = [];
   const order = Math.abs(dx) >= Math.abs(dy) ? [['x', Math.sign(dx)], ['y', Math.sign(dy)]] : [['y', Math.sign(dy)], ['x', Math.sign(dx)]];
+  
   for (const [axis, sign] of order) {
     if (sign === 0) continue;
     const step = { x: self.x + (axis === 'x' ? sign : 0), y: self.y + (axis === 'y' ? sign : 0) };
@@ -699,13 +715,20 @@ function smallAI(sm, side) {
     const step2 = { x: step.x + (axis === 'x' ? sign : 0), y: step.y + (axis === 'y' ? sign : 0) };
     if (step2.x >= 0 && step2.x <= 6 && step2.y >= 0 && step2.y <= 6 && !smallSamePos(step2, opp) && !sm.blockades.some(bd => bd.x === step2.x && bd.y === step2.y) && (step2.x === target.x && step2.y === target.y || dist(step2, target) < dist(step, target))) options.push(step2);
   }
+  
   const dashPen = sm[side === 'a' ? 'aDashPenalty' : 'bDashPenalty'];
-  if (!dashPen && dist(self, target) === 2 && options.some(o => o.x === target.x && o.y === target.y) && (target.x === self.x || target.y === self.y)) return { type: 'dash', target };
-  const blockIdx = items.indexOf('block'); if (blockIdx >= 0 && Math.random() < 0.25) return { type: 'item', itemIdx: blockIdx };
-  const trapIdx = items.indexOf('trap'); if (trapIdx >= 0 && Math.random() < 0.25) return { type: 'item', itemIdx: trapIdx };
+  if (!dashPen && dist(self, target) === 2 && options.some(o => o.x === target.x && o.y === target.y) && (target.x === self.x || target.y === self.y)) {
+    return { type: 'dash', target };
+  }
+  
+  const blockIdx = items.indexOf('block'); if (blockIdx >= 0 && Math.random() < 0.3) return { type: 'item', itemIdx: blockIdx };
+  const trapIdx = items.indexOf('trap'); if (trapIdx >= 0 && Math.random() < 0.3) return { type: 'item', itemIdx: trapIdx };
   const swapIdx = items.indexOf('swap'); if (swapIdx >= 0 && dist(self, target) >= 3 && Math.random() < 0.2) return { type: 'item', itemIdx: swapIdx };
+  
   if (options.length > 0) return { type: 'move', target: options[0] };
-  return onOwnCp ? { type: 'hold' } : { type: 'idle' };
+  
+  if (onOwnCp) return { type: 'hold' };
+  return { type: 'idle' };
 }
 function endSmallBoard(room) {
   const sm = room.small;
@@ -936,48 +959,171 @@ function fillWithAI(room) {
   broadcastRoomList();
 }
 function aiTryUseItem(room, ai, now) {
-  if (ai.hp <= 1 && ai.items.includes('item_6')) { ai.items.splice(ai.items.indexOf('item_6'), 1); ai.hp = Math.min(CONFIG.HP, ai.hp + 1); ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1; ai.nextActionAt = now + CONFIG.ACTION_CD; return true; }
-  if (ai.hp <= 2 && (ai.shields || 0) <= 0 && ai.items.includes('item_3')) { ai.items.splice(ai.items.indexOf('item_3'), 1); ai.shields = (ai.shields || 0) + 1; ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1; ai.nextActionAt = now + CONFIG.ACTION_CD; return true; }
-  if (ai.items.includes('item_2') && Math.random() < 0.05) { ai.items.splice(ai.items.indexOf('item_2'), 1); ai.scanUntil = now + CONFIG.SCAN_DURATION; ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1; ai.nextActionAt = now + CONFIG.ACTION_CD; computeVisibility(room, ai); return true; }
+  if (ai.hp <= 1 && ai.items.includes('item_6')) {
+    ai.items.splice(ai.items.indexOf('item_6'), 1);
+    ai.hp = Math.min(CONFIG.HP, ai.hp + 1);
+    ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+    ai.nextActionAt = now + CONFIG.ACTION_CD;
+    return true;
+  }
+  if (ai.hp <= 2 && (ai.shields || 0) <= 0 && ai.items.includes('item_3')) {
+    ai.items.splice(ai.items.indexOf('item_3'), 1);
+    ai.shields = (ai.shields || 0) + 1;
+    ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+    ai.nextActionAt = now + CONFIG.ACTION_CD;
+    return true;
+  }
+  if (ai.items.includes('item_2') && Math.random() < 0.05) {
+    ai.items.splice(ai.items.indexOf('item_2'), 1);
+    ai.scanUntil = now + CONFIG.SCAN_DURATION;
+    ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+    ai.nextActionAt = now + CONFIG.ACTION_CD;
+    computeVisibility(room, ai);
+    return true;
+  }
   if (ai.items.includes('item_8') && Math.random() < 0.15) {
     const nearEnemy = [...room.players.values()].some(o => o !== ai && o.alive && Math.abs(o.x - ai.x) <= 1 && Math.abs(o.y - ai.y) <= 1);
     if (nearEnemy) {
       ai.items.splice(ai.items.indexOf('item_8'), 1);
       let count = 0;
-      for (const other of room.players.values()) if (other !== ai && other.alive && Math.abs(other.x - ai.x) <= 1 && Math.abs(other.y - ai.y) <= 1) { other.disoriented = true; other.disorientedUntil = now + CONFIG.DISORIENT_DURATION; count++; }
-      ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1; ai.nextActionAt = now + CONFIG.ACTION_CD;
-      addLog(room, ai.name + ' 使用失控干扰器，影响 ' + count + ' 名玩家'); return true;
+      for (const other of room.players.values()) {
+        if (other !== ai && other.alive && Math.abs(other.x - ai.x) <= 1 && Math.abs(other.y - ai.y) <= 1) {
+          other.disoriented = true;
+          other.disorientedUntil = now + CONFIG.DISORIENT_DURATION;
+          count++;
+        }
+      }
+      ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+      ai.nextActionAt = now + CONFIG.ACTION_CD;
+      addLog(room, ai.name + ' 使用失控干扰器，影响 ' + count + ' 名玩家');
+      return true;
+    }
+  }
+  if (ai.items.includes('item_0')) {
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
+    for (const [dx, dy] of dirs) {
+      const nx = ai.x + dx, ny = ai.y + dy;
+      if (nx < 0 || ny < 0 || nx >= CONFIG.SIZE || ny >= CONFIG.SIZE) continue;
+      if (!isWalkable(room, nx, ny, ai.id)) continue;
+      const t = room.tiles[ny][nx];
+      let useDash = false;
+      if (t === TILE.RESOURCE && ai.items.length < CONFIG.ITEM_CAP) useDash = true;
+      if (t === TILE.RIFT && room.rifts.find(r => r.x === nx && r.y === ny && r.state === 'OPEN') && ai.hp > 1 && now - ai.lastRiftAt > 10000) useDash = true;
+      
+      if (useDash) {
+        ai.items.splice(ai.items.indexOf('item_0'), 1);
+        ai.x = nx; ai.y = ny;
+        ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+        ai.nextActionAt = now + CONFIG.ACTION_CD;
+        applyTileEffectOnMove(room, ai, now);
+        computeVisibility(room, ai);
+        return true;
+      }
+    }
+  }
+  if (ai.items.includes('item_1')) {
+    const inDanger = room.tiles[ai.y][ai.x] === TILE.DANGER || room.tiles[ai.y][ai.x] === TILE.RUIN;
+    if (inDanger || Math.random() < 0.1) {
+      let best = null;
+      let bestDist = -1;
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(() => Math.random() - 0.5);
+      for (const [dx, dy] of dirs) {
+        for (let d = 1; d <= 5; d++) {
+          const tx = ai.x + dx * d, ty = ai.y + dy * d;
+          if (tx < 0 || ty < 0 || tx >= CONFIG.SIZE || ty >= CONFIG.SIZE) break;
+          const t = room.tiles[ty][tx];
+          if (t === TILE.OBSTACLE || t === TILE.RUIN || t === TILE.RIFT) break;
+          if (t === TILE.NORMAL || t === TILE.RESOURCE) {
+            if (d > bestDist && isWalkable(room, tx, ty, ai.id)) {
+              bestDist = d; best = { x: tx, y: ty };
+            }
+          }
+        }
+      }
+      if (best) {
+        ai.items.splice(ai.items.indexOf('item_1'), 1);
+        ai.x = best.x; ai.y = best.y;
+        ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+        ai.nextActionAt = now + CONFIG.ACTION_CD;
+        applyTileEffectOnMove(room, ai, now);
+        computeVisibility(room, ai);
+        return true;
+      }
+    }
+  }
+  if (ai.items.includes('item_4')) {
+    const nearEnemy = [...room.players.values()].find(o => o !== ai && o.alive && Math.abs(o.x - ai.x) + Math.abs(o.y - ai.y) === 1);
+    if (nearEnemy && ai.hp <= 2) {
+      if (isValidRoadblockTarget(room, nearEnemy.x, nearEnemy.y)) {
+         room.roadblocks.push({ x: nearEnemy.x, y: nearEnemy.y, until: now + CONFIG.ROADBLOCK_DURATION });
+         ai.items.splice(ai.items.indexOf('item_4'), 1);
+         ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+         ai.nextActionAt = now + CONFIG.ACTION_CD;
+         addLog(room, ai.name + ' 放置了路障');
+         return true;
+      }
     }
   }
   return false;
 }
 function aiBigBoardDecision(room, ai, now) {
-  if (ai.waitingRiftId || room.small && (room.small.aId === ai.id || room.small.bId === ai.id) || !ai.alive || now < ai.nextActionAt || ai.disoriented) return;
+  if (ai.waitingRiftId || (room.small && (room.small.aId === ai.id || room.small.bId === ai.id)) || !ai.alive || now < ai.nextActionAt || ai.disoriented) return;
+  
+  if (Math.random() < 0.3) {
+    ai.riftHints = ai.riftHints.filter(h => !h.fake);
+  }
+
   if (aiTryUseItem(room, ai, now)) return;
+
   computeVisibility(room, ai);
+  
   const inDanger = room.tiles[ai.y][ai.x] === TILE.DANGER || room.tiles[ai.y][ai.x] === TILE.RUIN;
   const myRing = ring(ai.x, ai.y, CONFIG.SIZE);
   const inCollapsingRing = room.collapse.started && myRing <= room.collapse.ring;
   const preferDX = Math.cos(ai.preferAngle), preferDY = Math.sin(ai.preferAngle);
+  
   let best = null, bestScore = -Infinity;
+  
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const nx = ai.x + dx, ny = ai.y + dy;
     if (!isWalkable(room, nx, ny, ai.id)) continue;
+    
     const newRing = ring(nx, ny, CONFIG.SIZE), t = room.tiles[ny][nx];
     let score = newRing * 1.2;
+    
     if (t === TILE.DANGER) score -= 40;
     if (inDanger) score += 30;
     if (inCollapsingRing && newRing > myRing) score += 20;
     if (t === TILE.RESOURCE && ai.items.length < CONFIG.ITEM_CAP) score += 10;
-    if (t === TILE.RIFT && ai.hp > 1 && now - ai.lastRiftAt > 10000 && ai.riftHints.length === 0) score += 8;
-    for (const other of room.players.values()) if (other.id !== ai.id && other.alive && dist(other, { x: nx, y: ny }) <= 2) score -= 5;
+    
+    if (t === TILE.RIFT && ai.hp > 1 && now - ai.lastRiftAt > 10000 && ai.riftHints.length === 0) {
+      const r = room.rifts.find(rr => rr.x === nx && rr.y === ny);
+      if (r && r.state === 'OPEN') score += (ai.items.length >= 2 ? 30 : 15);
+    }
+    
+    let crowd = 0;
+    for (const other of room.players.values()) {
+      if (other.id !== ai.id && other.alive && dist(other, { x: nx, y: ny }) <= 2) crowd++;
+    }
+    const hpPenalty = (ai.hp <= 1) ? 30 : 0;
+    score -= crowd * (5 + hpPenalty);
+    
     if (dx * preferDX + dy * preferDY > 0.5) score += 2.5;
     score += Math.random() * 4;
-    if (score > bestScore) { bestScore = score; best = { nx, ny }; }
+    
+    if (score > bestScore) { 
+      bestScore = score; 
+      best = { nx, ny }; 
+    }
   }
+  
   if (best) {
     ai.x = best.nx; ai.y = best.ny; ai.nextActionAt = now + CONFIG.ACTION_CD;
-    if (room.tiles[ai.y][ai.x] === TILE.RESOURCE && ai.items.length < CONFIG.ITEM_CAP) { room.tiles[ai.y][ai.x] = TILE.NORMAL; ai.items.push(pick(ITEM_IDS)); ai.stats.pickups = (ai.stats.pickups || 0) + 1; }
+    if (room.tiles[ai.y][ai.x] === TILE.RESOURCE && ai.items.length < CONFIG.ITEM_CAP) {
+      room.tiles[ai.y][ai.x] = TILE.NORMAL;
+      ai.items.push(pick(ITEM_IDS));
+      ai.stats.pickups = (ai.stats.pickups || 0) + 1;
+    }
     if (room.tiles[ai.y][ai.x] === TILE.RIFT) tryEnterRift(room, ai);
     else if (room.tiles[ai.y][ai.x] === TILE.TRANSPORT) {
       for (let t = 0; t < 50; t++) {
@@ -986,7 +1132,9 @@ function aiBigBoardDecision(room, ai, now) {
       }
     }
     computeVisibility(room, ai);
-  } else ai.nextActionAt = now + CONFIG.ACTION_CD;
+  } else {
+    ai.nextActionAt = now + CONFIG.ACTION_CD;
+  }
 }
 
 function getStateFor(room, playerId) {
@@ -1082,13 +1230,20 @@ function joinRoom(room, socket, name) {
   }
   const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const idx = room.playerCounter++, spawn = findSpawn(room);
-  const safeName = (typeof name === 'string' ? name.trim().slice(0, 8) : '') || NAMES[idx] || ('玩家' + (idx + 1));
   const ip = getClientIpSocket(socket);
   
-  // ★ 新增：计算没被占用的颜色
   const usedColors = [...room.players.values()].map(p => p.color);
   const availableColors = COLORS.filter(c => !usedColors.includes(c));
   const myColor = availableColors.length > 0 ? pick(availableColors) : pick(COLORS);
+
+  // 根据随机到的颜色，反查对应的汉字名字
+  let defaultName = '玩家' + (idx + 1);
+  const colorIdx = COLORS.indexOf(myColor);
+  if (colorIdx >= 0 && NAMES[colorIdx]) {
+    defaultName = NAMES[colorIdx];
+  }
+  
+  const safeName = (typeof name === 'string' ? name.trim().slice(0, 8) : '') || defaultName;
 
   const player = {
     id, socketId: socket.id, isAI: false, name: safeName, color: myColor, x: spawn.x, y: spawn.y, hp: CONFIG.HP, shields: 0, alive: true,
