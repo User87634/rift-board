@@ -26,10 +26,22 @@ const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 // ================= 谷歌表格初始化 =================
 let sheetsClient = null;
-console.log('[启动检查] KEY存在?', !!GOOGLE_SERVICE_ACCOUNT_KEY, 'ID存在?', !!GOOGLE_SHEET_ID);
 if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_SHEET_ID) {
   try {
-    const keyJson = JSON.parse(GOOGLE_SERVICE_ACCOUNT_KEY.replace(/\\n/g, '\n'));
+    let rawKey = GOOGLE_SERVICE_ACCOUNT_KEY.trim();
+    // 1. 移除所有真实的 \r 回车符
+    rawKey = rawKey.replace(/\r/g, '');
+    
+    // 2. 核心修复：把 private_key 里的真实换行，自动替换成合法的 \n
+    rawKey = rawKey.replace(/"private_key"\s*:\s*"([\s\S]*?)"/g, (match, p1) => {
+      const cleanedKey = p1.replace(/\n/g, '\\n').replace(/\t/g, '');
+      return `"private_key": "${cleanedKey}"`;
+    });
+
+    // 3. 清理 JSON 结构外部的真实换行，防止结构被破坏
+    rawKey = rawKey.replace(/\n/g, ' '); 
+
+    const keyJson = JSON.parse(rawKey);
     const auth = new google.auth.GoogleAuth({
       credentials: keyJson,
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
@@ -38,6 +50,7 @@ if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_SHEET_ID) {
     console.log('[系统] 谷歌表格写入已启用');
   } catch (e) {
     console.error('[系统] 谷歌表格初始化失败，请检查环境变量:', e.message);
+    console.error('[系统] 出错片段预览:', GOOGLE_SERVICE_ACCOUNT_KEY.substring(150, 200));
   }
 }
 
