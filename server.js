@@ -903,7 +903,7 @@ function computeRankings(room) {
   return all.map((p, i) => ({
     rank: i + 1, id: p.id, name: p.name, color: p.color, isAI: !!p.isAI, alive: p.alive, hp: p.hp, fragments: p.fragments || 0, items: p.items.length,
     smallWins: p.stats.smallWins || 0, smallLosses: p.stats.smallLosses || 0, damageTaken: p.stats.damageTaken || 0, pickups: p.stats.pickups || 0,
-    itemsUsed: p.stats.itemsUsed || 0, riftEnters: p.stats.riftEnters || 0, killReason: p.stats.killReason || null, aliveTime: Math.round((p.alive ? now : (p.stats.deadAt || now)) / 1000)
+    itemsUsed: p.stats.itemsUsed || 0, riftEnters: p.stats.riftEnters || 0, killReason: p.stats.killReason || null, aliveTime: Math.round(((p.alive ? now : (p.stats.deadAt || now)) - room.createdAt) / 1000)
   }));
 }
 

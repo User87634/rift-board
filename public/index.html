@@ -482,6 +482,39 @@ function drawEffectsByLayer(layer, coordFn, ctx) {
 }
 function drawEffect(e, progress, coordFn, ctx) {
   const { x, y } = coordFn(e.x, e.y);
+    // ★ 新增：光轨牵引特效
+  if (e.type === 'movePath') {
+    const dx = e.data.dx;
+    const dy = e.data.dy;
+    const TS = e.data.ts || 45;
+    
+    // 起点是玩家原来的格子中心，终点是目标格子中心
+    const startX = x - (dx * TS);
+    const startY = y - (dy * TS);
+    
+    // 当前光轨的头部位置（随时间快速前进）
+    const curX = startX + (dx * TS) * progress;
+    const curY = startY + (dy * TS) * progress;
+
+    // 画光轨
+    ctx.strokeStyle = `rgba(59, 130, 246, ${1 - progress})`; // 蓝色渐隐
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(curX, curY);
+    ctx.stroke();
+    
+    // 画个发光的白色箭头头部
+    ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
+    ctx.beginPath();
+    ctx.arc(curX, curY, 5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.lineCap = 'butt';
+    return; // 画完直接返回
+  }
+
   if (e.type === 'dashTrail') {
     const r = 20 * (1 - progress * 0.5);
     ctx.fillStyle = 'rgba(245,158,11,' + (0.45 * (1 - progress)) + ')';
@@ -1998,8 +2031,13 @@ canvas.addEventListener('click', e => {
   flashMessage('冷却中，还不能移动');
   return;
   }
-  const info = getTileValue(x, y);
-  if (!(info && info.tile === TILE_RIFT)) playSound('move');
+  // ★ 新增：点击瞬间发射光轨！
+  addEffect('movePath', x, y, 300, { dx: dx, dy: dy, ts: CONFIG.TILE }, 'terrain');
+  
+  // 音效先播，给出即时反馈
+  playSound('move');
+  
+  // 发送移动指令
   socket.emit('move', { dx, dy }, res => {
     if (res && !res.ok && res.error) flashMessage(res.error);
     if (res && res.ok && res.disoriented) {
