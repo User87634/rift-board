@@ -260,41 +260,32 @@
     .mode-btn{padding:10px 8px;font-size:12px}
     .mode-btn .mode-name{font-size:13px}.mode-btn .mode-desc{font-size:10px}
   }
-    /* ===== 手机端结算界面专属修复 ===== */
+  
+  /* ===== 手机端结算界面专属修复 ===== */
   @media(max-width: 600px) {
     #gameOverPanel {
       padding: 20px 16px !important;
       border-radius: 16px !important;
     }
-    
-    /* 1. 修复标题换行：缩小字号和字间距 */
     #gameOverPanel h2 {
       font-size: 28px !important;
       letter-spacing: 2px !important;
       margin-bottom: 10px !important;
     }
-    
-    /* 2. 胜者标签稍微缩小 */
     #gameOverPanel .winner-name {
       font-size: 13px !important;
       padding: 4px 12px !important;
     }
-
-    /* 3. 修复排名列表挤压 */
     .rank-row {
       padding: 8px 10px !important;
       gap: 4px !important;
     }
-    
-    /* 让名字部分自动收缩，防止挤爆 */
     .rank-name {
       padding-left: 4px !important;
       display: flex !important;
       align-items: center !important;
-      flex-wrap: wrap !important; /* 允许名字太长时内部换行 */
+      flex-wrap: wrap !important;
     }
-
-    /* 强制右侧数据保持单行，不许换行，字体调小 */
     .rank-stats {
       flex-shrink: 0 !important;
       font-size: 11px !important;
@@ -303,45 +294,24 @@
     .rank-stats span {
       padding: 2px 4px !important;
     }
-
-    /* 把“已淘汰”压缩成一个小红标签，不许竖着排 */
     .rank-name span {
       font-size: 10px !important;
       margin-left: 4px !important;
-      white-space: nowrap !important; /* 强制不换行 */
+      white-space: nowrap !important;
       background: rgba(239, 68, 68, 0.1) !important;
       padding: 1px 4px !important;
       border-radius: 4px !important;
       display: inline-block !important;
     }
-
-    /* 排名数字稍微变窄 */
     .rank-num {
       width: 28px !important;
       font-size: 14px !important;
     }
-
-    /* 个人数据面板缩小间距 */
     .stat-item {
       padding: 8px 10px !important;
     }
   }
-    /* ===== 手机端小棋盘强制垂直布局修复 ===== */
-  body.in-small-board .game-layout {
-    display: flex !important;
-    flex-direction: column !important;
-  }
-  body.in-small-board .col-left,
-  body.in-small-board .col-right {
-    width: 100% !important;
-    max-height: none !important;
-    min-width: 100% !important;
-  }
-  #smallSidePanel {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 10px !important;
-  }
+
 </style>
 </head>
 <body>
@@ -406,6 +376,7 @@
     </div>
     <div id="spectateBanner" class="spectate-banner" style="display:none">你已淘汰，观战中</div>
     <div id="waitingBanner" class="waiting-banner" style="display:none">正在等待裂隙匹配...</div>
+    
     <div class="game-layout">
       <div class="col-left">
         <div id="itemsPanel" class="panel">
@@ -419,10 +390,26 @@
         <div id="playerPanel" class="panel">
           <h3>玩家</h3><div id="playerList"></div>
         </div>
+        <!-- ★ 小棋盘左侧（对决、道具） -->
+        <div id="smallLeftPanel" style="display:none; flex-direction: column; gap: 10px;">
+          <div class="panel" style="margin-bottom:0;">
+            <h3>小棋盘对决</h3>
+            <div class="small-score-row"><span>你</span><span class="me-score" id="smallMyScore">0</span></div>
+            <div class="small-score-row"><span id="smallOppName">对手</span><span class="opp-score" id="smallOppScore">0</span></div>
+            <div class="hint" style="margin-top:4px">先到 10 分或 60 秒高分者胜</div>
+          </div>
+          <div class="panel" style="margin-bottom:0;">
+            <h3>道具 <span style="color:#64748b;font-size:12px;font-weight:normal">（<span id="smallItemCount">0</span>/2）</span></h3>
+            <div id="smallItemList"><span style="color:#94a3b8;font-size:12px">空</span></div>
+            <div class="hint" style="margin-top:6px">点击道具即使用</div>
+          </div>
+        </div>
       </div>
+      
       <div class="col-board" id="boardWrap">
         <canvas id="board" width="720" height="720"></canvas>
       </div>
+      
       <div class="col-right">
         <div id="bigSidePanel" style="display:flex; flex-direction:column; gap:10px;">
           <div id="blessingPanel" class="panel" style="display:none;border:2px solid #7dd3fc">
@@ -450,36 +437,26 @@
           </div>
         </div>
         
-        <!-- 移动后的日志面板 -->
-        <div id="logPanel">
-          <h3>日志</h3><div id="logList"></div>
-        </div>
-
-        <div id="smallSidePanel" style="display:none">
-          <div class="panel">
-            <h3>小棋盘对决</h3>
-            <div class="small-score-row"><span>你</span><span class="me-score" id="smallMyScore">0</span></div>
-            <div class="small-score-row"><span id="smallOppName">对手</span><span class="opp-score" id="smallOppScore">0</span></div>
-            <div class="hint" style="margin-top:4px">先到 10 分或 60 秒高分者胜</div>
-          </div>
-          <div class="panel">
+        <!-- ★ 小棋盘右侧（回合、操作） -->
+        <div id="smallRightPanel" style="display:none; flex-direction: column; gap: 10px;">
+          <div class="panel" style="margin-bottom:0;">
             <h3>回合</h3>
             <div class="hint" id="smallTurnText">观察期</div>
             <div class="cooldown-bar"><div id="smallTurnBar" style="width:100%"></div></div>
             <div class="hint" style="margin-top:6px" id="smallEndsText"></div>
             <div class="hint" style="margin-top:6px" id="smallStatusText"></div>
           </div>
-          <div class="panel">
-            <h3>道具 <span style="color:#64748b;font-size:12px;font-weight:normal">（<span id="smallItemCount">0</span>/2）</span></h3>
-            <div id="smallItemList"><span style="color:#94a3b8;font-size:12px">空</span></div>
-            <div class="hint" style="margin-top:6px">点击道具即使用</div>
-          </div>
-          <div class="panel">
+          <div class="panel" style="margin-bottom:0;">
             <h3>操作</h3>
             <div class="hint">
               · 点相邻空格：移动 1 格<br>· 点 2 格外直线格：冲刺<br>· 点自己脚下：驻守（该点额外 +1）
             </div>
           </div>
+        </div>
+
+        <!-- 移动后的日志面板 -->
+        <div id="logPanel">
+          <h3>日志</h3><div id="logList"></div>
         </div>
       </div>
     </div>
@@ -768,7 +745,8 @@ const errorMsg = document.getElementById('errorMsg');
 const spectateBanner = document.getElementById('spectateBanner');
 const waitingBanner = document.getElementById('waitingBanner');
 const bigSidePanel = document.getElementById('bigSidePanel');
-const smallSidePanel = document.getElementById('smallSidePanel');
+const smallLeftPanel = document.getElementById('smallLeftPanel');
+const smallRightPanel = document.getElementById('smallRightPanel');
 const itemsPanel = document.getElementById('itemsPanel');
 const playerPanel = document.getElementById('playerPanel');
 const flashMsgEl = document.getElementById('flashMsg');
@@ -1561,12 +1539,14 @@ function updatePanels() {
   if (!me) return;
 
   const inSmall = !!myState.small;
-  if (inSmall) document.body.classList.add('in-small-board');
-  else document.body.classList.remove('in-small-board');
+  
   bigSidePanel.style.display = inSmall ? 'none' : 'flex';
-  smallSidePanel.style.display = inSmall ? 'flex' : 'none';
   if (itemsPanel) itemsPanel.style.display = inSmall ? 'none' : 'block';
   if (playerPanel) playerPanel.style.display = inSmall ? 'none' : 'block';
+  
+  // 控制小棋盘左右面板的显隐
+  if (smallLeftPanel) smallLeftPanel.style.display = inSmall ? 'flex' : 'none';
+  if (smallRightPanel) smallRightPanel.style.display = inSmall ? 'flex' : 'none';
 
   document.getElementById('modeTag').textContent = myState.mode === 'FOG' ? '迷雾' : '经典';
   document.getElementById('modeTag').className = 'mode-tag' + (myState.mode === 'FOG' ? ' fog' : '');
