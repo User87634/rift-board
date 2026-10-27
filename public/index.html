@@ -326,6 +326,22 @@
       padding: 8px 10px !important;
     }
   }
+    /* ===== 手机端小棋盘强制垂直布局修复 ===== */
+  body.in-small-board .game-layout {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  body.in-small-board .col-left,
+  body.in-small-board .col-right {
+    width: 100% !important;
+    max-height: none !important;
+    min-width: 100% !important;
+  }
+  #smallSidePanel {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
 </style>
 </head>
 <body>
@@ -1545,6 +1561,8 @@ function updatePanels() {
   if (!me) return;
 
   const inSmall = !!myState.small;
+  if (inSmall) document.body.classList.add('in-small-board');
+  else document.body.classList.remove('in-small-board');
   bigSidePanel.style.display = inSmall ? 'none' : 'flex';
   smallSidePanel.style.display = inSmall ? 'flex' : 'none';
   if (itemsPanel) itemsPanel.style.display = inSmall ? 'none' : 'block';
