@@ -260,6 +260,72 @@
     .mode-btn{padding:10px 8px;font-size:12px}
     .mode-btn .mode-name{font-size:13px}.mode-btn .mode-desc{font-size:10px}
   }
+    /* ===== 手机端结算界面专属修复 ===== */
+  @media(max-width: 600px) {
+    #gameOverPanel {
+      padding: 20px 16px !important;
+      border-radius: 16px !important;
+    }
+    
+    /* 1. 修复标题换行：缩小字号和字间距 */
+    #gameOverPanel h2 {
+      font-size: 28px !important;
+      letter-spacing: 2px !important;
+      margin-bottom: 10px !important;
+    }
+    
+    /* 2. 胜者标签稍微缩小 */
+    #gameOverPanel .winner-name {
+      font-size: 13px !important;
+      padding: 4px 12px !important;
+    }
+
+    /* 3. 修复排名列表挤压 */
+    .rank-row {
+      padding: 8px 10px !important;
+      gap: 4px !important;
+    }
+    
+    /* 让名字部分自动收缩，防止挤爆 */
+    .rank-name {
+      padding-left: 4px !important;
+      display: flex !important;
+      align-items: center !important;
+      flex-wrap: wrap !important; /* 允许名字太长时内部换行 */
+    }
+
+    /* 强制右侧数据保持单行，不许换行，字体调小 */
+    .rank-stats {
+      flex-shrink: 0 !important;
+      font-size: 11px !important;
+      gap: 6px !important;
+    }
+    .rank-stats span {
+      padding: 2px 4px !important;
+    }
+
+    /* 把“已淘汰”压缩成一个小红标签，不许竖着排 */
+    .rank-name span {
+      font-size: 10px !important;
+      margin-left: 4px !important;
+      white-space: nowrap !important; /* 强制不换行 */
+      background: rgba(239, 68, 68, 0.1) !important;
+      padding: 1px 4px !important;
+      border-radius: 4px !important;
+      display: inline-block !important;
+    }
+
+    /* 排名数字稍微变窄 */
+    .rank-num {
+      width: 28px !important;
+      font-size: 14px !important;
+    }
+
+    /* 个人数据面板缩小间距 */
+    .stat-item {
+      padding: 8px 10px !important;
+    }
+  }
 </style>
 </head>
 <body>
