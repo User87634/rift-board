@@ -140,13 +140,14 @@ async function recordVisit(type, ip, name, room, ua, account = '') {
   visits.push(record);
   if (visits.length > VISITS_MAX) visits.shift();
 
-  // 存谷歌表格 (多加了一列 account)
+  // 存谷歌表格 (使用 insert 插入到第二行)
   if (sheetsClient && GOOGLE_SHEET_ID) {
-    const timeStr = new Date(record.t).toLocaleString('zh-CN', { hour12: false });
-    sheetsClient.spreadsheets.values.append({
+    const timeStr = new Date(record.t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+    sheetsClient.spreadsheets.values.insert({
       spreadsheetId: GOOGLE_SHEET_ID,
-      range: 'A1',
+      range: 'A2', // 指定插入到第二行
       valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS', // 必须加上这个，告诉 API 是插入新行，而不是覆盖第二行
       requestBody: { values: [[timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room]] }
     }).catch(err => console.error('[Google Sheets] 写入失败:', err.message));
   }
@@ -214,7 +215,7 @@ const token = new URLSearchParams(location.search).get('token') || '';
 const names = {visit:'打开网页',connect:'建立连接',join:'加入房间',leave:'离开房间',create:'创建房间'};
 const cls = {visit:'t-visit',connect:'t-connect',join:'t-join',leave:'t-leave',create:'t-create'};
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function fmt(t){const d=new Date(t);return d.toLocaleString('zh-CN',{hour12:false});}
+function fmt(t){const d=new Date(t);return d.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});}
 
 async function tick(){
   try{
@@ -377,8 +378,7 @@ function dirOf(from, to) {
   return dy > 0 ? '南' : '北';
 }
 function ts() {
-  const d = new Date();
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+  return new Date().toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
 }
 function addLog(room, text) {
   if (!room || !text) return;
