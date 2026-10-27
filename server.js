@@ -1,6 +1,6 @@
 /* ============================================================
-   裂隙棋盘 局域网联机服务器 — v8
-   新增：访问密码、访客日志、后台管理、谷歌表格自动写入、失控倒计时修复
+   裂隙棋盘 局域网联机服务器 — v9
+   新增：账号密码系统、防爆破、谷歌表格账号维度记录、后台看板统计
    ============================================================ */
 
 const express = require('express');
@@ -18,27 +18,62 @@ const io = new Server(server);
 app.use(express.json()); // 用于解析登录请求
 
 // ================= 环境变量与全局配置 =================
-const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin123';
-const ACCESS_COOKIE = 'rift_access';
+const ACCESS_COOKIE = 'rift_user'; // Cookie 存储账号名
+
+// ★ 账号密码配置表（你可以随时在这里增删改，推送到 GitHub 即可生效）
+const ACCOUNTS = {
+  '100101': 'Vxt728!q', '100102': 'Hnb394#w', '100103': 'Mjk561@e', '100104': 'Pqz845$r', '100105': 'Fgh219%t',
+  '100106': 'Wsr673&y', '100107': 'Klm482*u', '100108': 'Cvx931!i', '100109': 'Bnm547@o', '100110': 'Ztr618#p',
+  '100111': 'Yui295$a', '100112': 'Hjk374%s', '100113': 'Mlo583&d', '100114': 'Poi642*f', '100115': 'Lkj819!g',
+  '100116': 'Tyu457@h', '100117': 'Rty726#j', '100118': 'Ewr839$k', '100119': 'Qwe164%l', '100120': 'Asd275&z',
+  '100121': 'Zxc386*x', '100122': 'Cvb497!c', '100123': 'Vbn518@v', '100124': 'Bnm629#b', '100125': 'Nji739$n',
+  '100126': 'Mki841%m', '100127': 'Lok952&k', '100128': 'Plo163*f', '100129': 'Kij274!d', '100130': 'Uhy385@s',
+  '100131': 'Ytr496#a', '100132': 'Tew517$p', '100133': 'Qas628%o', '100134': 'Wdx739&i', '100135': 'Ecv841*u',
+  '100136': 'Rfv952!y', '100137': 'Tgb163@t', '100138': 'Yhn274#r', '100139': 'Ujm385$e', '100140': 'Ikl496%w',
+  '100141': 'Opl517&q', '100142': 'Poi628*a', '100143': 'Kju739!s', '100144': 'Mhy841@d', '100145': 'Ntf952#f',
+  '100146': 'Bgr163$g', '100147': 'Vde274%h', '100148': 'Cws385&j', '100149': 'Xaz496*k', '100150': 'Zqw517!l',
+  '100151': 'Ert628@z', '100152': 'Rty739#x', '100153': 'Tui841$c', '100154': 'Iop952%v', '100155': 'Oas163&b',
+  '100156': 'Pdf274*n', '100157': 'Jkl385!m', '100158': 'Hnm496@q', '100159': 'Gty517#w', '100160': 'Fgh628$e',
+  '100161': 'Dsb739%r', '100162': 'Saf841&t', '100163': 'Agh952*y', '100164': 'Ygb163!u', '100165': 'Tgh274@i',
+  '100166': 'Rgf385#o', '100167': 'Edf496$p', '100167': 'Edf496$p', '100168': 'Wsf517%a', '100169': 'Qdv628&s',
+  '100170': 'Zcv739*d', '100171': 'Xbv841!f', '100172': 'Cnv952@g', '100173': 'Vmv163#h', '100174': 'Bmv274$j',
+  '100175': 'Ncm385%k', '100176': 'Mcv496&l', '100177': 'Lcw517*z', '100178': 'Pcw628!x', '100179': 'Kcv739@c',
+  '100180': 'Ucv841#v', '100181': 'Ycb952$b', '100182': 'Tvb163%n', '100183': 'Qvb274&m', '100184': 'Wbn385*q',
+  '100185': 'Ebn496!w', '100186': 'Rnm517@e', '100187': 'Tnm628#r', '100188': 'Ymn739$t', '100189': 'Umn841%y',
+  '100190': 'Imn952&u', '100191': 'Omn163*i', '100192': 'Pmn274!o', '100193': 'Kmb385@p', '100194': 'Mvn496#a',
+  '100195': 'Nvb517$s', '100196': 'Bvb628%d', '100197': 'Vvb739&f', '100198': 'Cvb841*g', '100199': 'Xvb952!h',
+  '100200': 'Zvb163@j'
+};
+
 const GOOGLE_SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
+
+// 辅助提取账号
+function getAccountFromReq(req) {
+  const cookie = req.headers.cookie || '';
+  const m = cookie.match(/(?:^|;\s*)rift_user=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '游客';
+}
+function getAccountFromSocket(socket) {
+  const cookie = socket.handshake.headers.cookie || '';
+  const m = cookie.match(/(?:^|;\s*)rift_user=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '游客';
+}
 
 // ================= 谷歌表格初始化 =================
 let sheetsClient = null;
 if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_SHEET_ID) {
   try {
     let rawKey = GOOGLE_SERVICE_ACCOUNT_KEY.trim();
-    // 1. 移除所有真实的 \r 回车符
     rawKey = rawKey.replace(/\r/g, '');
     
-    // 2. 核心修复：把 private_key 里的真实换行，自动替换成合法的 \n
+    // 修复 private_key 里的真实换行
     rawKey = rawKey.replace(/"private_key"\s*:\s*"([\s\S]*?)"/g, (match, p1) => {
       const cleanedKey = p1.replace(/\n/g, '\\n').replace(/\t/g, '');
       return `"private_key": "${cleanedKey}"`;
     });
 
-    // 3. 清理 JSON 结构外部的真实换行，防止结构被破坏
     rawKey = rawKey.replace(/\n/g, ' '); 
 
     const keyJson = JSON.parse(rawKey);
@@ -85,12 +120,11 @@ function getDeviceInfo(uaStr) {
   return `${device}-${res.browser.name || '未知浏览器'}`;
 }
 
-async function recordVisit(type, ip, name, room, ua) {
+async function recordVisit(type, ip, name, room, ua, account = '') {
   const masked = maskIp(ip);
   const device = getDeviceInfo(ua);
   let location = '未知';
 
-  // 异步查 IP 归属地（使用免费的 ip-api，只在公网 IP 时查）
   if (masked && !masked.startsWith('127.') && !masked.startsWith('192.168.') && masked !== '::1') {
     try {
       const res = await axios.get(`http://ip-api.com/json/${ip}?lang=zh-CN`, { timeout: 2000 });
@@ -100,20 +134,20 @@ async function recordVisit(type, ip, name, room, ua) {
     } catch (e) {}
   }
 
-  const record = { t: Date.now(), type, ip: masked, location, device, name: name || '-', room: room || '-' };
+  const record = { t: Date.now(), type, ip: masked, location, device, name: name || '-', room: room || '-', account: account || '游客' };
   
   // 存内存
   visits.push(record);
   if (visits.length > VISITS_MAX) visits.shift();
 
-  // 存谷歌表格
+  // 存谷歌表格 (多加了一列 account)
   if (sheetsClient && GOOGLE_SHEET_ID) {
     const timeStr = new Date(record.t).toLocaleString('zh-CN', { hour12: false });
     sheetsClient.spreadsheets.values.append({
       spreadsheetId: GOOGLE_SHEET_ID,
       range: 'A1',
       valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[timeStr, type, record.name, record.location, record.ip, record.device, record.room]] }
+      requestBody: { values: [[timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room]] }
     }).catch(err => console.error('[Google Sheets] 写入失败:', err.message));
   }
 }
@@ -124,45 +158,107 @@ const LOGIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f4f8;font-family:system-ui;padding:20px}
 .card{background:#fff;border-radius:14px;padding:28px 26px;max-width:360px;width:100%;box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}
 h1{margin:0 0 6px;font-size:24px;color:#0f172a}.sub{color:#64748b;font-size:13px;margin-bottom:20px}
-input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;text-align:center;letter-spacing:2px;outline:none;box-sizing:border-box}
+input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;text-align:center;outline:none;box-sizing:border-box;margin-bottom:10px}
 input:focus{border-color:#3b82f6}button{margin-top:12px;width:100%;padding:12px;background:#3b82f6;color:#fff;border:0;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
 button:hover{background:#2563eb}button:disabled{background:#94a3b8;cursor:not-allowed}.msg{margin-top:12px;font-size:13px;color:#dc2626;min-height:18px}</style></head><body>
-<div class="card"><h1>裂隙棋盘</h1><div class="sub">请输入访问密码</div>
-<input id="pwd" type="password" placeholder="密码" autocomplete="off"><button id="btn">进入</button><div class="msg" id="msg"></div></div>
-<script>const pwd=document.getElementById('pwd'),btn=document.getElementById('btn'),msg=document.getElementById('msg');
-async function submit(){const v=pwd.value.trim();if(!v){msg.textContent='请输入密码';return;}btn.disabled=true;msg.textContent='';
-try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:v})});
-if(r.ok){location.href='/';}else{msg.textContent='密码不正确';btn.disabled=false;}}catch(e){msg.textContent='网络错误，请重试';btn.disabled=false;}}
-btn.onclick=submit;pwd.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});pwd.focus();</script></body></html>`;
+<div class="card"><h1>裂隙棋盘</h1><div class="sub">请输入专属账号密码</div>
+<input id="user" type="text" placeholder="账号" autocomplete="off">
+<input id="pwd" type="password" placeholder="密码" autocomplete="off">
+<button id="btn">进入游戏</button><div class="msg" id="msg"></div></div>
+<script>const user=document.getElementById('user'),pwd=document.getElementById('pwd'),btn=document.getElementById('btn'),msg=document.getElementById('msg');
+async function submit(){const u=user.value.trim(),p=pwd.value.trim();if(!u||!p){msg.textContent='请填写账号和密码';return;}btn.disabled=true;msg.textContent='';
+try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:u,password:p})});
+if(r.ok){location.href='/';}else{const d=await r.json();msg.textContent=d.error||'账号或密码错误';btn.disabled=false;}}catch(e){msg.textContent='网络错误，请重试';btn.disabled=false;}}
+btn.onclick=submit;pwd.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});</script></body></html>`;
 
-const ADMIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>裂隙棋盘 · 后台</title>
-<style>body{font-family:system-ui;background:#f0f4f8;margin:0;padding:20px;color:#1e293b}
-h1{margin:0 0 8px;font-size:22px}.sub{color:#64748b;font-size:13px;margin-bottom:16px}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-th,td{padding:8px 12px;text-align:left;font-size:13px;border-bottom:1px solid #f1f5f9}th{background:#f8fafc;color:#475569;font-weight:600;position:sticky;top:0}
-tr:hover td{background:#f8fafc}.tag{display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600}
-.t-visit{background:#dbeafe;color:#1e40af}.t-connect{background:#dcfce7;color:#166534}.t-join{background:#fef3c7;color:#92400e}.t-leave{background:#fee2e2;color:#991b1b}.t-create{background:#ede9fe;color:#6d28d9}</style></head><body>
-<h1>裂隙棋盘 · 访问后台</h1><div class="sub">每 3 秒自动刷新 · <span id="cnt">0</span> 条记录</div>
-<table><thead><tr><th>时间</th><th>事件</th><th>玩家</th><th>归属地</th><th>设备</th><th>IP段</th><th>房间</th></tr></thead><tbody id="tb"></tbody></table>
-<script>const token=new URLSearchParams(location.search).get('token')||'';
-const names={visit:'打开网页',connect:'建立连接',join:'加入房间',leave:'离开房间',create:'创建房间'};
-const cls={visit:'t-visit',connect:'t-connect',join:'t-join',leave:'t-leave',create:'t-create'};
+const ADMIN_HTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0"><title>裂隙棋盘 · 后台</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;margin:0;padding:20px;color:#1e293b}
+  h1{margin:0 0 8px;font-size:22px;color:#0f172a}.sub{color:#64748b;font-size:13px;margin-bottom:16px}
+  .dashboard{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+  .stat-card{background:#fff;border-radius:12px;padding:16px 20px;flex:1;min-width:120px;box-shadow:0 4px 12px rgba(0,0,0,0.03);border:1px solid #e2e8f0}
+  .stat-card .label{font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px}
+  .stat-card .value{font-size:28px;font-weight:800;color:#3b82f6}
+  .grid-layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .table-wrap{flex:2;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);border:1px solid #e2e8f0;min-width:400px}
+  table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
+  th,td{padding:10px 14px;border-bottom:1px solid #f1f5f9}
+  th{background:#f8fafc;color:#475569;font-weight:600;position:sticky;top:0}
+  tr:hover td{background:#f8fafc}
+  .tag{display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600}
+  .t-visit{background:#dbeafe;color:#1e40af}.t-connect{background:#dcfce7;color:#166534}.t-join{background:#fef3c7;color:#92400e}.t-leave{background:#fee2e2;color:#991b1b}.t-create{background:#ede9fe;color:#6d28d9}
+  .player-wrap{flex:1;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);border:1px solid #e2e8f0;min-width:250px}
+</style></head><body>
+
+<h1>裂隙棋盘 · 账号运营大盘</h1>
+<div class="sub">每 3 秒自动刷新 · 当前显示最近 <span id="cnt">0</span> 条流水</div>
+
+<div class="dashboard">
+  <div class="stat-card"><div class="label">去重活跃账号</div><div class="value" id="stat-accounts">0</div></div>
+  <div class="stat-card"><div class="label">总开局次数</div><div class="value" id="stat-games">0</div></div>
+  <div class="stat-card"><div class="label">总请求次数</div><div class="value" id="stat-visits">0</div></div>
+</div>
+
+<div class="grid-layout">
+  <div class="table-wrap">
+    <table><thead><tr><th>时间</th><th>事件</th><th>账号</th><th>游戏内昵称</th><th>城市</th><th>设备</th><th>IP段</th><th>房间</th></tr></thead><tbody id="tb"></tbody></table>
+  </div>
+  <div class="player-wrap">
+    <table><thead><tr><th>登录账号</th><th>上线次数</th><th>参与局数</th></tr></thead><tbody id="ptb"></tbody></table>
+  </div>
+</div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+const names = {visit:'打开网页',connect:'建立连接',join:'加入房间',leave:'离开房间',create:'创建房间'};
+const cls = {visit:'t-visit',connect:'t-connect',join:'t-join',leave:'t-leave',create:'t-create'};
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmt(t){const d=new Date(t);return d.toLocaleString('zh-CN',{hour12:false});}
-async function tick(){try{const r=await fetch('/admin/data?token='+encodeURIComponent(token));
-if(!r.ok){document.getElementById('tb').innerHTML='<tr><td colspan="7" style="color:#dc2626">密码错误或无权限</td></tr>';return;}
-const list=await r.json();document.getElementById('cnt').textContent=list.length;
-document.getElementById('tb').innerHTML=list.map(v=>'<tr><td>'+fmt(v.t)+'</td><td><span class="tag '+cls[v.type]+'">'+(names[v.type]||v.type)+'</span></td>'
-+'<td>'+esc(v.name)+'</td><td>'+esc(v.location)+'</td><td>'+esc(v.device)+'</td><td>'+esc(v.ip)+'</td><td>'+esc(v.room)+'</td></tr>').join('')||'<tr><td colspan="7" style="color:#94a3b8">暂无记录</td></tr>';
-}catch(e){}}tick();setInterval(tick,3000);</script></body></html>`;
+
+async function tick(){
+  try{
+    const r = await fetch('/admin/data?token='+encodeURIComponent(token));
+    if(!r.ok){document.getElementById('tb').innerHTML='<tr><td colspan="8" style="color:#dc2626">密码错误或无权限</td></tr>';return;}
+    const list = await r.json();
+    
+    document.getElementById('cnt').textContent = list.length;
+    document.getElementById('tb').innerHTML = list.map(v=>
+      '<tr><td>'+fmt(v.t)+'</td><td><span class="tag '+cls[v.type]+'">'+(names[v.type]||v.type)+'</span></td>'
+      +'<td style="font-weight:600;color:#4f46e5">'+esc(v.account||'-')+'</td>'
+      +'<td>'+esc(v.name)+'</td><td>'+esc(v.location)+'</td><td>'+esc(v.device)+'</td><td>'+esc(v.ip)+'</td><td>'+esc(v.room)+'</td></tr>'
+    ).join('') || '<tr><td colspan="8" style="color:#94a3b8">暂无记录</td></tr>';
+
+    let totalGames = 0, totalVisits = list.length, accMap = new Map(), uniqueAccs = new Set();
+    list.forEach(v => {
+      if(v.type === 'create') totalGames++;
+      if(v.account && v.account !== '-' && v.account !== '游客') {
+        uniqueAccs.add(v.account);
+        if(!accMap.has(v.account)) accMap.set(v.account, { connections: 0, games: 0 });
+        const p = accMap.get(v.account);
+        if(v.type === 'connect') p.connections++;
+        if(v.type === 'create' || v.type === 'join') p.games++;
+      }
+    });
+    document.getElementById('stat-accounts').textContent = uniqueAccs.size;
+    document.getElementById('stat-games').textContent = totalGames;
+    document.getElementById('stat-visits').textContent = totalVisits;
+
+    const arr = Array.from(accMap.entries()).map(([account, data]) => ({ account, ...data })).sort((a,b) => b.games - a.games);
+    document.getElementById('ptb').innerHTML = arr.map(p => 
+      '<tr><td style="font-weight:600;color:#4f46e5">'+esc(p.account)+'</td><td>'+p.connections+' 次</td><td><span style="font-weight:700;color:#d97706">'+p.games+'</span> 次</td></tr>'
+    ).join('') || '<tr><td colspan="3" style="color:#94a3b8">暂无玩家数据</td></tr>';
+  }catch(e){}
+}
+tick();setInterval(tick,3000);
+</script></body></html>`;
 
 app.get('/login', (req, res) => res.send(LOGIN_HTML));
+
 // 记录尝试次数：{ IP: { count: 失败次数, lastAttempt: 最后尝试时间 } }
 const loginAttempts = new Map();
 
 app.post('/api/login', (req, res) => {
-  if (!ACCESS_PASSWORD) return res.json({ ok: true });
-  
   const ip = getClientIpReq(req);
   const now = Date.now();
   const record = loginAttempts.get(ip) || { count: 0, lastAttempt: 0 };
@@ -177,19 +273,23 @@ app.post('/api/login', (req, res) => {
     return res.status(429).json({ ok: false, error: '密码错误次数过多，请 1 分钟后再试' });
   }
 
-  // 验证密码
-  if (req.body.password !== ACCESS_PASSWORD) {
+  const u = req.body.user;
+  const p = req.body.password;
+
+  // 校验账号和密码
+  if (!u || !p || ACCOUNTS[u] !== p) {
     record.count += 1;
     record.lastAttempt = now;
     loginAttempts.set(ip, record);
-    return res.status(401).json({ ok: false });
+    return res.status(401).json({ ok: false, error: '账号或密码错误' });
   }
 
-  // 密码正确，清空失败记录
+  // 登录成功，清空失败记录，种下包含账号名的 Cookie
   loginAttempts.delete(ip);
-  res.setHeader('Set-Cookie', `${ACCESS_COOKIE}=${encodeURIComponent(ACCESS_PASSWORD)}; Path=/; Max-Age=2592000; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `${ACCESS_COOKIE}=${encodeURIComponent(u)}; Path=/; Max-Age=2592000; SameSite=Lax`);
   res.json({ ok: true });
 });
+
 app.get('/admin', (req, res) => {
   if (req.query.token !== ADMIN_TOKEN) return res.status(403).send('无权限');
   res.send(ADMIN_HTML);
@@ -201,13 +301,12 @@ app.get('/admin/data', (req, res) => {
 
 // 网页请求拦截
 app.use((req, res, next) => {
-  if (!ACCESS_PASSWORD) return next();
   if (req.path === '/login' || req.path === '/api/login') return next();
-  const cookie = req.headers.cookie || '';
-  const m = cookie.match(new RegExp('(?:^|;\\s*)' + ACCESS_COOKIE + '=([^;]+)'));
-  if (m && decodeURIComponent(m[1]) === ACCESS_PASSWORD) return next();
+  const account = getAccountFromReq(req);
+  if (ACCOUNTS[account]) return next(); // 账号在名单里，放行
+  
   if (req.path === '/') {
-    recordVisit('visit', getClientIpReq(req), '', '', req.headers['user-agent']);
+    recordVisit('visit', getClientIpReq(req), '', '', req.headers['user-agent'], '未登录');
     res.redirect('/login');
   } else {
     res.status(401).send('unauthorized');
@@ -218,10 +317,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Socket 连接拦截
 io.use((socket, next) => {
-  if (!ACCESS_PASSWORD) return next();
-  const cookie = socket.handshake.headers.cookie || '';
-  const m = cookie.match(new RegExp('(?:^|;\\s*)' + ACCESS_COOKIE + '=([^;]+)'));
-  if (m && decodeURIComponent(m[1]) === ACCESS_PASSWORD) return next();
+  const account = getAccountFromSocket(socket);
+  if (ACCOUNTS[account]) return next();
   next(new Error('unauthorized'));
 });
 
@@ -961,7 +1058,7 @@ function computeRankings(room) {
 function createAIPlayer(room, aiIdx) {
   const spawn = findSpawn(room);
   
-  // ★ 修复：动态计算当前房间还没被占用的颜色
+  // 动态计算当前房间还没被占用的颜色
   const usedColors = [...room.players.values()].map(p => p.color);
   const availableColors = COLORS.filter(c => !usedColors.includes(c));
   
@@ -976,7 +1073,7 @@ function createAIPlayer(room, aiIdx) {
     id: 'ai_' + aiIdx, 
     socketId: null, 
     isAI: true, 
-    name: myName, // 直接使用和颜色一一对应的名字
+    name: myName,
     color: myColor, 
     x: spawn.x, 
     y: spawn.y, 
@@ -1294,7 +1391,6 @@ function getStateFor(room, playerId) {
     myScanRemaining: me && me.scanUntil ? Math.max(0, me.scanUntil - now) : 0, myVisionRemaining: me && me.visionBuffUntil ? Math.max(0, me.visionBuffUntil - now) : 0,
     myInsightRemaining: me && me.insightUntil ? Math.max(0, me.insightUntil - now) : 0,
     
-    // 修复：新增失控剩余时间
     myDisoriented: me && me.disoriented && me.disorientedUntil > now ? true : false,
     myDisorientedRemaining: me && me.disoriented && me.disorientedUntil > now ? (me.disorientedUntil - now) : 0,
 
@@ -1368,8 +1464,9 @@ function joinRoom(room, socket, name) {
   broadcastState(room);
   broadcastRoomList();
 
-  recordVisit('join', ip, player.name, room.code, player.ua);
-  console.log(`[${room.code}] ${player.name} 加入（${room.players.size}/${CONFIG.MAX_PLAYERS}）IP: ${ip}`);
+  const acc = getAccountFromSocket(socket);
+  recordVisit('join', ip, player.name, room.code, player.ua, acc);
+  console.log(`[${room.code}] [${acc}] ${player.name} 加入（${room.players.size}/${CONFIG.MAX_PLAYERS}）IP: ${ip}`);
   return { ok: true, playerId: id, code: room.code };
 }
 function getMyPlayer(socket) {
@@ -1382,7 +1479,8 @@ function getMyPlayer(socket) {
 
 /* ---------- Socket 事件 ---------- */
 io.on('connection', socket => {
-  recordVisit('connect', getClientIpSocket(socket), '', '', socket.handshake.headers['user-agent']);
+  const account = getAccountFromSocket(socket);
+  recordVisit('connect', getClientIpSocket(socket), '', '', socket.handshake.headers['user-agent'], account);
   socket.emit('rooms_list', getRoomList());
 
   socket.on('list_rooms', (data, cb) => { if (cb) cb(getRoomList()); else socket.emit('rooms_list', getRoomList()); });
@@ -1391,7 +1489,7 @@ io.on('connection', socket => {
     const room = createRoom(data && data.mode === 'FOG' ? 'FOG' : 'CLASSIC');
     if (!room) return cb && cb({ ok: false, error: '房间创建失败' });
     const res = joinRoom(room, socket, data && data.name);
-    if (res.ok) recordVisit('create', getClientIpSocket(socket), data && data.name, room.code, socket.handshake.headers['user-agent']);
+    if (res.ok) recordVisit('create', getClientIpSocket(socket), data && data.name, room.code, socket.handshake.headers['user-agent'], account);
     cb && cb(res);
   });
 
@@ -1560,7 +1658,7 @@ io.on('connection', socket => {
     } else broadcastState(room);
     broadcastRoomList();
     
-    recordVisit('leave', player.ip || '', player.name, room.code, player.ua || '');
+    recordVisit('leave', player.ip || '', player.name, room.code, player.ua || '', getAccountFromSocket(socket));
   });
 });
 
@@ -1651,7 +1749,7 @@ server.listen(PORT, '0.0.0.0', () => {
   for (const name of Object.keys(nets)) for (const net of nets[name]) if (net.family === 'IPv4' && !net.internal) ips.push(net.address);
   console.log('');
   console.log('========================================');
-  console.log('  裂隙棋盘 联机服务器（v8 安全增强版）');
+  console.log('  裂隙棋盘 联机服务器（v9 账号安全版）');
   console.log('========================================');
   console.log('');
   console.log('  本机访问：http://localhost:' + PORT);
