@@ -157,9 +157,36 @@ document.getElementById('tb').innerHTML=list.map(v=>'<tr><td>'+fmt(v.t)+'</td><t
 }catch(e){}}tick();setInterval(tick,3000);</script></body></html>`;
 
 app.get('/login', (req, res) => res.send(LOGIN_HTML));
+// 记录尝试次数：{ IP: { count: 失败次数, lastAttempt: 最后尝试时间 } }
+const loginAttempts = new Map();
+
 app.post('/api/login', (req, res) => {
   if (!ACCESS_PASSWORD) return res.json({ ok: true });
-  if (req.body.password !== ACCESS_PASSWORD) return res.status(401).json({ ok: false });
+  
+  const ip = getClientIpReq(req);
+  const now = Date.now();
+  const record = loginAttempts.get(ip) || { count: 0, lastAttempt: 0 };
+
+  // 如果距离上次尝试超过 1 分钟，重置计数
+  if (now - record.lastAttempt > 60000) {
+    record.count = 0;
+  }
+
+  // 如果失败次数超过 5 次，直接拒绝
+  if (record.count >= 5) {
+    return res.status(429).json({ ok: false, error: '密码错误次数过多，请 1 分钟后再试' });
+  }
+
+  // 验证密码
+  if (req.body.password !== ACCESS_PASSWORD) {
+    record.count += 1;
+    record.lastAttempt = now;
+    loginAttempts.set(ip, record);
+    return res.status(401).json({ ok: false });
+  }
+
+  // 密码正确，清空失败记录
+  loginAttempts.delete(ip);
   res.setHeader('Set-Cookie', `${ACCESS_COOKIE}=${encodeURIComponent(ACCESS_PASSWORD)}; Path=/; Max-Age=2592000; SameSite=Lax`);
   res.json({ ok: true });
 });
@@ -933,16 +960,60 @@ function computeRankings(room) {
 
 function createAIPlayer(room, aiIdx) {
   const spawn = findSpawn(room);
-  const usedNames = new Set([...room.players.values()].map(p => p.name));
-  let name = NAMES.find(n => !usedNames.has('AI-' + n));
-  if (!name) name = 'AI-' + (aiIdx + 1);
+  
+  // ★ 修复：动态计算当前房间还没被占用的颜色
+  const usedColors = [...room.players.values()].map(p => p.color);
+  const availableColors = COLORS.filter(c => !usedColors.includes(c));
+  
+  // 优先从没用过的颜色里挑，如果都被占满了（极罕见），用备用颜色
+  const myColor = availableColors.length > 0 ? availableColors[0] : AI_COLORS[aiIdx % AI_COLORS.length];
+  
+  // 根据最终拿到的颜色，反查对应的名字，保证绝对匹配
+  const nameIdx = COLORS.indexOf(myColor);
+  const myName = nameIdx >= 0 ? NAMES[nameIdx] : ('AI-' + (aiIdx + 1));
+
   return {
-    id: 'ai_' + aiIdx, socketId: null, isAI: true, name, color: AI_COLORS[aiIdx % AI_COLORS.length], x: spawn.x, y: spawn.y, hp: CONFIG.HP, shields: 0, alive: true,
+    id: 'ai_' + aiIdx, 
+    socketId: null, 
+    isAI: true, 
+    name: myName, // 直接使用和颜色一一对应的名字
+    color: myColor, 
+    x: spawn.x, 
+    y: spawn.y, 
+    hp: CONFIG.HP, 
+    shields: 0, 
+    alive: true,
     joinAt: Date.now(),
-    items: [], fragments: 0, relic: null, winStreak: 0, lossStreak: 0, pendingBlessing: null, pendingRelic: null, riftHints: [], waitingRiftId: null, riftKeyBuff: false,
-    riftKeyPendingItem: false, riftRushBuff: false, riftRushPendingScore: false, harvestBuff: false, insightUntil: 0, scanUntil: 0, visionBuffUntil: 0, fatigueUntil: 0, exposedUntil: 0,
-    disoriented: false, disorientedUntil: 0, hpRestoredThisGame: false, relicExchangedThisGame: false, lastRiftAt: 0, lastScoreAt: 0, nextActionAt: 0, lastDangerDmg: 0,
-    visible: new Set(), tileMemory: {}, preferAngle: (aiIdx / CONFIG.MAX_PLAYERS) * Math.PI * 2,
+    items: [], 
+    fragments: 0, 
+    relic: null, 
+    winStreak: 0, 
+    lossStreak: 0, 
+    pendingBlessing: null, 
+    pendingRelic: null, 
+    riftHints: [], 
+    waitingRiftId: null, 
+    riftKeyBuff: false,
+    riftKeyPendingItem: false, 
+    riftRushBuff: false, 
+    riftRushPendingScore: false, 
+    harvestBuff: false, 
+    insightUntil: 0, 
+    scanUntil: 0, 
+    visionBuffUntil: 0, 
+    fatigueUntil: 0, 
+    exposedUntil: 0,
+    disoriented: false, 
+    disorientedUntil: 0, 
+    hpRestoredThisGame: false, 
+    relicExchangedThisGame: false, 
+    lastRiftAt: 0, 
+    lastScoreAt: 0, 
+    nextActionAt: 0, 
+    lastDangerDmg: 0,
+    visible: new Set(), 
+    tileMemory: {}, 
+    preferAngle: (aiIdx / CONFIG.MAX_PLAYERS) * Math.PI * 2,
     stats: { damageTaken: 0, killReason: null, deadAt: null, smallWins: 0, smallLosses: 0, pickups: 0, itemsUsed: 0, riftEnters: 0 }
   };
 }
@@ -1082,6 +1153,23 @@ function aiBigBoardDecision(room, ai, now) {
   const inCollapsingRing = room.collapse.started && myRing <= room.collapse.ring;
   const preferDX = Math.cos(ai.preferAngle), preferDY = Math.sin(ai.preferAngle);
   
+  // 新增：如果血量和冷却允许，AI 会主动寻找裂隙（包括有人等待的裂隙）
+  let targetRift = null;
+  let minRiftDist = 99;
+  if (ai.hp > 1 && now - ai.lastRiftAt > 10000) {
+    for (const r of room.rifts) {
+      if (r.state === 'OPEN' || r.state === 'WAITING') {
+        const d = dist(ai, r);
+        // 如果是有人等待的裂隙，优先级更高（距离权重放大）
+        const weightDist = r.state === 'WAITING' ? d - 2 : d; 
+        if (weightDist < minRiftDist) {
+          minRiftDist = weightDist;
+          targetRift = r;
+        }
+      }
+    }
+  }
+  
   let best = null, bestScore = -Infinity;
   
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -1096,9 +1184,22 @@ function aiBigBoardDecision(room, ai, now) {
     if (inCollapsingRing && newRing > myRing) score += 20;
     if (t === TILE.RESOURCE && ai.items.length < CONFIG.ITEM_CAP) score += 10;
     
-    if (t === TILE.RIFT && ai.hp > 1 && now - ai.lastRiftAt > 10000 && ai.riftHints.length === 0) {
+    // 修复：裂隙判定，加上 WAITING 状态
+    if (t === TILE.RIFT && ai.hp > 1 && now - ai.lastRiftAt > 10000) {
       const r = room.rifts.find(rr => rr.x === nx && rr.y === ny);
-      if (r && r.state === 'OPEN') score += (ai.items.length >= 2 ? 30 : 15);
+      if (r && (r.state === 'OPEN' || r.state === 'WAITING')) {
+        // 如果是有人等待的裂隙（直接开打），给极高的权重
+        if (r.state === 'WAITING') score += 60; 
+        else score += (ai.items.length >= 2 ? 30 : 15);
+      }
+    }
+    
+    // 新增：如果存在目标裂隙，计算这一步是否在靠近裂隙
+    if (targetRift && t !== TILE.RIFT) {
+      const distToRift = Math.abs(targetRift.x - nx) + Math.abs(targetRift.y - ny);
+      if (distToRift < minRiftDist) {
+        score += 15; // 向裂隙靠近的步数，每靠近一格加 15 分
+      }
     }
     
     let crowd = 0;
@@ -1124,7 +1225,12 @@ function aiBigBoardDecision(room, ai, now) {
       ai.items.push(pick(ITEM_IDS));
       ai.stats.pickups = (ai.stats.pickups || 0) + 1;
     }
-    if (room.tiles[ai.y][ai.x] === TILE.RIFT) tryEnterRift(room, ai);
+    if (room.tiles[ai.y][ai.x] === TILE.RIFT) {
+      const r = room.rifts.find(rr => rr.x === ai.x && rr.y === ai.y);
+      if (r && (r.state === 'OPEN' || r.state === 'WAITING')) {
+         tryEnterRift(room, ai);
+      }
+    }
     else if (room.tiles[ai.y][ai.x] === TILE.TRANSPORT) {
       for (let t = 0; t < 50; t++) {
         const tx = Math.floor(Math.random() * CONFIG.SIZE), ty = Math.floor(Math.random() * CONFIG.SIZE);
