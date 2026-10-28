@@ -134,22 +134,40 @@ async function recordVisit(type, ip, name, room, ua, account = '') {
     } catch (e) {}
   }
 
+  // 核心修复1：强制加上 8 小时，生成北京时间的字符串
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  const timeStr = d.toISOString().replace('T', ' ').substring(0, 19);
+
   const record = { t: Date.now(), type, ip: masked, location, device, name: name || '-', room: room || '-', account: account || '游客' };
   
-  // 存内存
   visits.push(record);
   if (visits.length > VISITS_MAX) visits.shift();
 
-  // 存谷歌表格 (使用 insert 插入到第二行)
+  // 核心修复2：强制插入到第二行
   if (sheetsClient && GOOGLE_SHEET_ID) {
-    const timeStr = new Date(record.t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-    sheetsClient.spreadsheets.values.insert({
-      spreadsheetId: GOOGLE_SHEET_ID,
-      range: 'A2', // 指定插入到第二行
-      valueInputOption: 'USER_ENTERED',
-      insertDataOption: 'INSERT_ROWS', // 必须加上这个，告诉 API 是插入新行，而不是覆盖第二行
-      requestBody: { values: [[timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room]] }
-    }).catch(err => console.error('[Google Sheets] 写入失败:', err.message));
+    try {
+      // 第一步：在第 2 行插入一个空行，把原有的数据往下挤
+      await sheetsClient.spreadsheets.batchUpdate({
+        spreadsheetId: GOOGLE_SHEET_ID,
+        requestBody: {
+          requests: [{
+            insertDimension: {
+              range: { sheetId: 0, dimension: "ROWS", startIndex: 1, endIndex: 2 },
+              inheritFromBefore: false
+            }
+          }]
+        }
+      });
+      // 第二步：把最新记录写入 A2
+      await sheetsClient.spreadsheets.values.update({
+        spreadsheetId: GOOGLE_SHEET_ID,
+        range: 'A2:H2',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room]] }
+      });
+    } catch (err) {
+      console.error('[Google Sheets] 写入失败:', err.message);
+    }
   }
 }
 
@@ -475,7 +493,11 @@ function isWalkable(room, x, y, ignorePlayerId) {
   const t = room.tiles[y][x];
   if (t === TILE.OBSTACLE || t === TILE.RUIN) return false;
   if (room.roadblocks.some(r => r.x === x && r.y === y && r.until > Date.now())) return false;
-  if (t === TILE.RIFT) return true;
+  if (t === TILE.RIFT) {
+    const rift = room.rifts.find(r => r.x === x && r.y === y);
+    if (rift && rift.state === 'BUSY') return false; // 如果正在对决中，第三个人不能踩上来
+    return true;
+  }
   for (const p of room.players.values()) if (p.id !== ignorePlayerId && p.alive && p.x === x && p.y === y) return false;
   return true;
 }
@@ -1352,11 +1374,12 @@ function getStateFor(room, playerId) {
   const playersForMe = [];
   for (const p of room.players.values()) {
     const base = { id: p.id, name: p.name, color: p.color, alive: p.alive, isMe: p.id === playerId, isAI: !!p.isAI, winStreak: p.winStreak || 0, lossStreak: p.lossStreak || 0, hasRelic: !!p.relic, hasBlessing: !!p.pendingBlessing, hasPendingRelic: !!p.pendingRelic };
+    const pInSmall = room.small && (room.small.aId === p.id || room.small.bId === p.id);
     if (!me || p.id === playerId || (me.visible && me.visible.has(p.x + ',' + p.y))) {
       Object.assign(base, {
         x: p.x, y: p.y, hp: p.hp, shields: p.shields || 0, cooldownRemaining: Math.max(0, p.nextActionAt - now), waitingRiftId: p.waitingRiftId,
         riftWaitRemaining: p.waitingRiftId ? Math.max(0, p.nextActionAt - now) : 0, fatigueRemaining: p.fatigueUntil ? Math.max(0, p.fatigueUntil - now) : 0,
-        disoriented: p.disoriented && p.disorientedUntil > now ? true : false, hidden: false
+        disoriented: p.disoriented && p.disorientedUntil > now ? true : false, hidden: false, isInSmall: !!pInSmall
       });
     } else base.hidden = true;
     playersForMe.push(base);
@@ -1646,7 +1669,13 @@ io.on('connection', socket => {
     const { room, player } = r;
     if (room.small && (room.small.aId === player.id || room.small.bId === player.id)) {
       const sm = room.small, oppId = sm.aId === player.id ? sm.bId : sm.aId, opp = room.players.get(oppId);
-      if (opp) opp.hp = Math.min(CONFIG.HP, opp.hp + 1);
+      if (opp) {
+        opp.hp = Math.min(CONFIG.HP, opp.hp + 1);
+        // ★ 修复：对手断线后，把留下来的胜者传送回安全区！
+        const safe = findSafeCell(room);
+        if (safe) { opp.x = safe.x; opp.y = safe.y; }
+        opp.nextActionAt = Date.now() + 5000; 
+      }
       const rift = room.rifts.find(r => r.id === sm.riftId);
       if (rift) { rift.state = 'COOLDOWN'; rift.cooldownUntil = Date.now() + CONFIG.RIFT_COOLDOWN; }
       room.small = null; addLog(room, player.name + ' 在小棋盘中断线，对手获胜');

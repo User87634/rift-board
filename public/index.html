@@ -1264,6 +1264,7 @@ function renderBigBoard() {
 
   for (const p of myState.players) {
     if (!p.alive || p.hidden || p.x === undefined) continue;
+    if (p.isInSmall) continue; // 如果在打对决，在大棋盘上隐身
     if (p.x < view.vx || p.x >= view.vx + view.vs || p.y < view.vy || p.y >= view.vy + view.vs) continue;
     
     const vp = visualPositions[p.id] || p;
