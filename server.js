@@ -134,7 +134,7 @@ async function recordVisit(type, ip, name, room, ua, account = '') {
     } catch (e) {}
   }
 
-  // 核心修复1：强制加上 8 小时，生成北京时间的字符串
+  // 强制转为北京时间 (+8小时)
   const d = new Date(Date.now() + 8 * 3600 * 1000);
   const timeStr = d.toISOString().replace('T', ' ').substring(0, 19);
 
@@ -143,26 +143,14 @@ async function recordVisit(type, ip, name, room, ua, account = '') {
   visits.push(record);
   if (visits.length > VISITS_MAX) visits.shift();
 
-  // 核心修复2：强制插入到第二行
+  // 一步到位：把新数据插入到第 2 行
   if (sheetsClient && GOOGLE_SHEET_ID) {
     try {
-      // 第一步：在第 2 行插入一个空行，把原有的数据往下挤
-      await sheetsClient.spreadsheets.batchUpdate({
+      await sheetsClient.spreadsheets.values.insert({
         spreadsheetId: GOOGLE_SHEET_ID,
-        requestBody: {
-          requests: [{
-            insertDimension: {
-              range: { sheetId: 0, dimension: "ROWS", startIndex: 1, endIndex: 2 },
-              inheritFromBefore: false
-            }
-          }]
-        }
-      });
-      // 第二步：把最新记录写入 A2
-      await sheetsClient.spreadsheets.values.update({
-        spreadsheetId: GOOGLE_SHEET_ID,
-        range: 'A2:H2',
+        range: 'A2',
         valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
         requestBody: { values: [[timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room]] }
       });
     } catch (err) {
