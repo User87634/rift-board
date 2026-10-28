@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>裂隙棋盘 联机版 · v9</title>
+<title>裂隙棋盘 联机版 · v10</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
   /* ================= 基础与重置 ================= */
@@ -162,6 +162,7 @@
   .status-tag.insight{background:#cffafe;color:#0e7490}
   .status-tag.decoy{background:#fef3c7;color:#92400e}
   .status-tag.disoriented{background:#fee2e2;color:#dc2626;border-color:#fecaca;animation:pulseRed 1s infinite alternate}
+  .status-tag.immune{background:#dcfce7;color:#166534;border-color:#bbf7d0}
   @keyframes pulseRed {0% { box-shadow: 0 0 0 rgba(220, 38, 38, 0); }100% { box-shadow: 0 0 10px rgba(220, 38, 38, 0.3); }}
   
   .relic-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:12px;color:#6d28d9;font-weight:600}
@@ -169,9 +170,13 @@
   .spectate-banner{background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
   .waiting-banner{background:#ede9fe;color:#6d28d9;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
   
-  .item-btn{display:inline-block;padding:5px 9px;background:rgba(255, 255, 255, 0.85);border:1px solid rgba(199, 210, 254, 0.8);border-radius:8px;cursor:pointer;margin:2px;font-size:12px;color:#312e81;user-select:none;font-weight:600;touch-action:manipulation;box-shadow:0 2px 6px rgba(79, 70, 229, 0.05);transition:all 0.2s}
+  /* 道具及丢弃 */
+  .item-wrapper { display: inline-flex; align-items: center; position: relative; margin: 2px; }
+  .item-btn{display:inline-block;padding:5px 9px;background:rgba(255, 255, 255, 0.85);border:1px solid rgba(199, 210, 254, 0.8);border-radius:8px;cursor:pointer;font-size:12px;color:#312e81;user-select:none;font-weight:600;touch-action:manipulation;box-shadow:0 2px 6px rgba(79, 70, 229, 0.05);transition:all 0.2s}
   .item-btn:hover{background:#fff;border-color:#818cf8;box-shadow:0 4px 10px rgba(79, 70, 229, 0.15)}
   .item-btn.selected{background:linear-gradient(135deg, #6366f1, #3b82f6);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(59, 130, 246, 0.4)}
+  .drop-btn { position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 12px; line-height: 14px; text-align: center; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 2; transition: transform 0.1s; }
+  .drop-btn:hover { transform: scale(1.2); background: #dc2626; }
   
   .small-item-btn{background:#fef9c3;border-color:#fde047;color:#854d0e}
   .small-item-btn:hover{background:#fef08a}
@@ -322,7 +327,7 @@
   <div id="lobby">
     <div class="header-box">
       <h1>裂隙棋盘</h1>
-      <div class="sub">局域网联机 · v9</div>
+      <div class="sub">局域网联机 · v10</div>
       <div class="disclaimer">个人非商业项目 · 完全免费 · 不收取任何费用</div>
     </div>
     <div class="card">
@@ -401,7 +406,7 @@
           <div class="panel" style="margin-bottom:0;">
             <h3>道具 <span style="color:#64748b;font-size:12px;font-weight:normal">（<span id="smallItemCount">0</span>/2）</span></h3>
             <div id="smallItemList"><span style="color:#94a3b8;font-size:12px">空</span></div>
-            <div class="hint" style="margin-top:6px">点击道具即使用</div>
+            <div class="hint" style="margin-top:6px">点击道具即使用<br>（封锁不占行动）</div>
           </div>
         </div>
       </div>
@@ -498,13 +503,13 @@ const BIG_ITEM_DEFS = {
   'item_4': { glyph: '障', name: '路障', desc: '在相邻空格放置路障15秒', select: true },
   'item_5': { glyph: '钥', name: '裂隙钥匙', desc: '下次裂隙等待减半，小棋盘多1道具', select: false },
   'item_6': { glyph: '医', name: '医疗包', desc: '恢复1点生命', select: false },
-  'item_7': { glyph: '诱', name: '诱饵干扰器', desc: '周围7格内假广播5秒', select: false },
+  'item_7': { glyph: '染', name: '负面传染', desc: '不占行动，将自身剩余的失控/疲惫时间复制给上下左右4格玩家', select: false },
   'item_8': { glyph: '乱', name: '失控干扰器', desc: '使周围3×3内其他玩家失控一回合', select: false }
 };
 const SMALL_ITEM_DEFS = {
   push: { glyph: '推', name: '推挤', desc: '将对手沿最近控制点反方向推1格' },
-  block: { glyph: '封', name: '封锁', desc: '随机封锁未占领控制点2回合' },
-  trap: { glyph: '陷', name: '陷阱', desc: '随机放在控制点周围，踩中下回合不能动' },
+  block: { glyph: '封', name: '封锁', desc: '封锁一个未被占领的控制点2回合，不占行动' },
+  trap: { glyph: '陷', name: '陷阱', desc: '在控制点周围放置两个陷阱，踩中定身2回合' },
   steal: { glyph: '偷', name: '偷分', desc: '偷取对手1分' },
   swap: { glyph: '换', name: '置换', desc: '与对手交换位置' }
 };
@@ -1438,12 +1443,15 @@ function renderSmallBoard() {
     const def = SMALL_ITEM_DEFS[it.type]; ctx.fillText(def ? def.glyph : '?', px, py); ctx.textBaseline = 'alphabetic';
   }
 
-  if (sm.myTrap) {
-    const px = offX + sm.myTrap.pos.x * TS + TS / 2, py = offY + sm.myTrap.pos.y * TS + TS / 2, r = TS * 0.24;
-    roundRect(px - r, py - r, r * 2, r * 2, 7); ctx.fillStyle = '#fee2e2'; ctx.fill();
-    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2; roundRect(px - r, py - r, r * 2, r * 2, 7); ctx.stroke(); ctx.lineWidth = 1;
-    ctx.fillStyle = '#dc2626'; ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('陷', px, py); ctx.textBaseline = 'alphabetic';
+  // 渲染双陷阱
+  if (sm.myTraps && sm.myTraps.length > 0) {
+    for (const trap of sm.myTraps) {
+      const px = offX + trap.x * TS + TS / 2, py = offY + trap.y * TS + TS / 2, r = TS * 0.24;
+      roundRect(px - r, py - r, r * 2, r * 2, 7); ctx.fillStyle = '#fee2e2'; ctx.fill();
+      ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2; roundRect(px - r, py - r, r * 2, r * 2, 7); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = '#dc2626'; ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('陷', px, py); ctx.textBaseline = 'alphabetic';
+    }
   }
 
   if (sm.myInput && !sm.inObserve) {
@@ -1578,6 +1586,7 @@ function updatePanels() {
   if (myState.myScanRemaining > 0) tags.push(`<span class="status-tag scan">扫描 ${Math.ceil(myState.myScanRemaining/1000)}s</span>`);
   if (myState.myVisionRemaining > 0) tags.push(`<span class="status-tag vision">视野+1 ${Math.ceil(myState.myVisionRemaining/1000)}s</span>`);
   if (myState.myInsightRemaining > 0) tags.push(`<span class="status-tag insight">洞察 ${Math.ceil(myState.myInsightRemaining/1000)}s</span>`);
+  if (myState.myImmuneRemaining > 0) tags.push(`<span class="status-tag immune">免疫控制 ${Math.ceil(myState.myImmuneRemaining/1000)}s</span>`);
   const hasFakeHint = (myState.myRiftHints || []).some(h => h.fake);
   if (hasFakeHint) tags.push(`<span class="status-tag decoy">受干扰</span>`);
   if (myState.myDisoriented) {
@@ -1657,7 +1666,11 @@ function renderBigItems(me) {
         const sel = pendingItemUse && pendingItemUse.itemIdx === idx;
         const cls = ['item-btn'];
         if (sel) cls.push('selected');
-        return `<span class="${cls.join(' ')}" data-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">${idx + 1} ${def.glyph} ${def.name}</span>`;
+        // 添加丢弃按钮
+        return `<div class="item-wrapper">
+          <span class="${cls.join(' ')}" data-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">${idx + 1} ${def.glyph} ${def.name}</span>
+          <span class="drop-btn" data-drop-idx="${idx}" title="丢弃此道具">×</span>
+        </div>`;
       }).join('');
     }
   }
@@ -1743,7 +1756,7 @@ function renderSmallItems() {
   else turnEl.textContent = '第 ' + (sm.turnCount + 1) + ' 回合';
 
   const statusArr = [];
-  if (sm.myStunned) statusArr.push('陷阱定身');
+  if (sm.myStunned) statusArr.push('陷阱定身(' + sm.myStunnedTurns + '回合)');
   if (sm.myDashPenalty) statusArr.push('冲刺惩罚');
   if (sm.myHoldPenalty) statusArr.push('驻守惩罚');
   statusEl.textContent = statusArr.length > 0 ? '⚠ ' + statusArr.join(' / ') : '';
@@ -1860,9 +1873,18 @@ function onBigItemClick(idx) {
   const def = BIG_ITEM_DEFS[itemId];
   if (!def) return;
 
+  // 负面传染拦截：自身如果没有负面状态，提示无法使用
+  if (itemId === 'item_7') {
+    if ((myState.myFatigueRemaining || 0) <= 0 && !myState.myDisoriented) {
+      flashMessage('你当前没有可传染的负面状态');
+      playSound('blocked');
+      return;
+    }
+  }
+
   const elapsed = performance.now() - lastCooldownUpdate;
   const remaining = (me.cooldownRemaining || 0) - elapsed;
-  if (itemId !== 'item_0' && remaining > 0) {
+  if (itemId !== 'item_0' && itemId !== 'item_7' && remaining > 0) {
     flashMessage('冷却中，无法使用道具');
     playSound('blocked');
     return;
@@ -1884,6 +1906,17 @@ function onSmallItemClick(idx) {
   const sm = myState.small;
   if (sm.inObserve) { flashMessage('观察期内不可操作'); return; }
   if (idx < 0 || idx >= sm.myItems.length) return;
+  
+  // 封锁独立处理
+  if (sm.myItems[idx] === 'block') {
+    socket.emit('small_action', { type: 'use_block' }, res => {
+      if (res && res.ok) playSound('item');
+      else if (res && !res.ok) { flashMessage(res.error || '封锁失败'); playSound('blocked'); }
+    });
+    return;
+  }
+
+  // 普通道具
   socket.emit('small_action', { type: 'item', itemIdx: idx }, res => {
     if (res && res.ok) playSound('item');
     else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
@@ -1891,10 +1924,24 @@ function onSmallItemClick(idx) {
 }
 
 document.addEventListener('pointerdown', e => {
+  const dbtn = e.target.closest('[data-drop-idx]');
+  if (dbtn) { 
+    e.preventDefault(); 
+    const idx = parseInt(dbtn.dataset.dropIdx);
+    if (pendingItemUse && pendingItemUse.itemIdx === idx) pendingItemUse = null;
+    socket.emit('drop_item', { itemIdx: idx }, res => {
+      if (res && res.ok) playSound('blocked'); // 用阻断音效替代丢弃音效
+      else if (res && !res.ok) flashMessage(res.error || '丢弃失败');
+    });
+    return; 
+  }
+
   const btn = e.target.closest('[data-item-idx]');
   if (btn) { e.preventDefault(); onBigItemClick(parseInt(btn.dataset.itemIdx)); return; }
+  
   const sbtn = e.target.closest('[data-small-item-idx]');
   if (sbtn) { e.preventDefault(); onSmallItemClick(parseInt(sbtn.dataset.smallItemIdx)); return; }
+  
   const fbtn = e.target.closest('[data-frag-idx]');
   if (fbtn && !fbtn.disabled) {
     e.preventDefault();
