@@ -143,16 +143,33 @@ async function recordVisit(type, ip, name, room, ua, account = '') {
   visits.push(record);
   if (visits.length > VISITS_MAX) visits.shift();
 
-  // 一步到位：把新数据插入到第 2 行
   if (sheetsClient && GOOGLE_SHEET_ID) {
     try {
-      await sheetsClient.spreadsheets.values.insert({
+      // 1. 读取表格 A2 开始的所有旧数据
+      const getRes = await sheetsClient.spreadsheets.values.get({
         spreadsheetId: GOOGLE_SHEET_ID,
-        range: 'A2',
-        valueInputOption: 'USER_ENTERED',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: { values: [[timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room]] }
+        range: 'A2:H'
       });
+      
+      let oldValues = getRes.data.values || [];
+      
+      // 2. 把新数据放在最前面
+      const newRow = [timeStr, type, record.account, record.name, record.location, record.ip, record.device, record.room];
+      let allValues = [newRow, ...oldValues];
+      
+      // 3. 限制最多只保留 500 条，防止表格撑爆
+      if (allValues.length > 500) {
+        allValues = allValues.slice(0, 500);
+      }
+
+      // 4. 暴力覆盖：把最新组装好的数据重新写回 A2
+      await sheetsClient.spreadsheets.values.update({
+        spreadsheetId: GOOGLE_SHEET_ID,
+        range: 'A2:H',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: allValues }
+      });
+      
     } catch (err) {
       console.error('[Google Sheets] 写入失败:', err.message);
     }
