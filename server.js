@@ -1542,5 +1542,19 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   const nets = os.networkInterfaces(), ips = [];
   for (const name of Object.keys(nets)) for (const net of nets[name]) if (net.family === 'IPv4' && !net.internal) ips.push(net.address);
-  console.log('服务器已启动，端口：' + PORT);
+  
+  console.log('');
+  console.log('========================================');
+  console.log('  裂隙棋盘 联机服务器（v10 预览版）');
+  console.log('========================================');
+  console.log('');
+  console.log('  本机访问：http://localhost:' + PORT);
+  if (ips.length) {
+    console.log('  局域网地址（手机连电脑）：');
+    ips.forEach(ip => console.log('    http://' + ip + ':' + PORT));
+  }
+  console.log('');
+  console.log('  按 Ctrl+C 关闭服务器');
+  console.log('========================================');
+  console.log('');
 });

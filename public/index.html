@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>裂隙棋盘 联机版 · v10</title>
+<title>裂隙棋盘 联机版 · v10.2</title>
 <script src="/socket.io/socket.io.js"></script>
+<!-- ★ 新增：引入字体 -->
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+<!-- ★ 引入 Iconify 图标库 -->
+<script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
 <style>
   /* ================= 基础与重置 ================= */
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -36,6 +40,7 @@
   .header-box{padding:24px 28px;text-align:center;margin-bottom:16px}
   .header-box h1{
     font-size:38px;margin:0 0 8px;font-weight:800;letter-spacing:2px;
+    font-family: 'ZCOOL KuaiLe', system-ui, sans-serif;
     background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
     background-clip: text;
     -webkit-background-clip: text;
@@ -105,7 +110,11 @@
   .header-main{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .header-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .room-code{font-size:18px;font-weight:700;letter-spacing:2px;color:#0f172a}
-  .room-code b{color:#4f46e5;text-shadow:0 0 10px rgba(79, 70, 229, 0.2)}
+    .room-code b{
+    color:#4f46e5;
+    text-shadow:0 0 10px rgba(79, 70, 229, 0.2);
+    font-family: 'Orbitron', system-ui, sans-serif;
+  }
   .mode-tag{padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#dbeafe;color:#1e40af}
   .mode-tag.fog{background:#ede9fe;color:#6d28d9}
   .mute-btn{width:auto;padding:4px 12px;font-size:14px;background:#fff;color:#475569;border:1px solid #cbd5e1}
@@ -154,9 +163,9 @@
   
   .my-status{display:flex;gap:10px;margin-bottom:6px;font-size:13px;align-items:center;flex-wrap:wrap}
   .my-status .hp-big{color:#ef4444;font-weight:700;font-size:17px;letter-spacing:1px;text-shadow:0 0 12px rgba(239, 68, 68, 0.4)}
-  .my-status .sh-big{color:#a3a3a3;font-size:13px}
+  .my-status .sh-big{color:#a3a3a3;font-size:13px; display:flex; align-items:center; gap:2px;}
   .status-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-  .status-tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;border:1px solid transparent}
+  .status-tag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;border:1px solid transparent;display:flex;align-items:center;gap:4px;}
   .status-tag.scan{background:#e0f2fe;color:#0284c7;border-color:#bae6fd}
   .status-tag.vision{background:#f3e8ff;color:#7e22ce;border-color:#e9d5ff}
   .status-tag.insight{background:#cffafe;color:#0e7490}
@@ -170,14 +179,83 @@
   .spectate-banner{background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
   .waiting-banner{background:#ede9fe;color:#6d28d9;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:10px}
   
-  /* 道具及丢弃 */
+  /* ★ 道具卡片及特效（完美缝合版） */
   .item-wrapper { display: inline-flex; align-items: center; position: relative; margin: 2px; }
-  .item-btn{display:inline-block;padding:5px 9px;background:rgba(255, 255, 255, 0.85);border:1px solid rgba(199, 210, 254, 0.8);border-radius:8px;cursor:pointer;font-size:12px;color:#312e81;user-select:none;font-weight:600;touch-action:manipulation;box-shadow:0 2px 6px rgba(79, 70, 229, 0.05);transition:all 0.2s}
+  .item-btn{
+    display:inline-flex; 
+    flex-direction: column;
+    align-items: center; 
+    justify-content: center;
+    padding:4px 2px; 
+    background:rgba(255, 255, 255, 0.85);
+    border:1px solid rgba(199, 210, 254, 0.8); 
+    border-radius:8px;
+    cursor:pointer; 
+    width: 58px; 
+    height: 58px;
+    color:#312e81; 
+    user-select:none; 
+    font-weight:600;
+    touch-action:manipulation; 
+    box-shadow:0 2px 6px rgba(79, 70, 229, 0.05);
+    transition:all 0.2s;
+    position: relative; 
+    overflow: hidden; 
+  }
   .item-btn:hover{background:#fff;border-color:#818cf8;box-shadow:0 4px 10px rgba(79, 70, 229, 0.15)}
   .item-btn.selected{background:linear-gradient(135deg, #6366f1, #3b82f6);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(59, 130, 246, 0.4)}
-  .drop-btn { position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 12px; line-height: 14px; text-align: center; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 2; transition: transform 0.1s; }
+
+  .item-btn iconify-icon {
+    font-size: 40px;
+    margin-bottom: 4px;
+    position: relative;
+    z-index: 2;
+    animation: brightness-pulse 8s infinite alternate ease-in-out;
+  }
+  @keyframes brightness-pulse { 
+    0% { filter: brightness(0.75); opacity: 0.9; } 
+    100% { filter: brightness(1.1); opacity: 1; } 
+  }
+
+  .item-btn .item-name {
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+    color: #475569;
+    z-index: 2;
+  }
+  .item-btn.selected .item-name { color: #e0e7ff; }
+
+  .item-btn .item-shortcut {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 9px;
+    color: rgba(0, 0, 0, 0.25);
+    font-weight: 800;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .item-btn.selected .item-shortcut { color: rgba(255, 255, 255, 0.4); }
+
+  .item-btn::after {
+    content: ''; position: absolute; top: -50%; left: -100%; width: 20px; height: 200%;
+    background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.6), rgba(255,255,255,0));
+    transform: rotate(30deg); animation: sweep 30s infinite cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; z-index: 1;
+  }
+  @keyframes sweep { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
+
+  .drop-btn { position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 12px; line-height: 14px; text-align: center; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 3; transition: transform 0.1s; }
   .drop-btn:hover { transform: scale(1.2); background: #dc2626; }
   
+  /* 图标颜色 */
+  .c-cyan { color: #0891b2; }
+  .c-purple { color: #9333ea; }
+  .c-green { color: #16a34a; }
+  .c-red { color: #dc2626; }
+  .c-gold { color: #d97706; }
+  .selected iconify-icon { color: #fff !important; }
+
   .small-item-btn{background:#fef9c3;border-color:#fde047;color:#854d0e}
   .small-item-btn:hover{background:#fef08a}
   
@@ -249,7 +327,8 @@
     .player-item{font-size:11px;padding:3px 0}
     .my-status{font-size:12px;gap:6px}.my-status .hp-big{font-size:14px}
     .hint{font-size:10px;line-height:1.4}
-    .item-btn{padding:7px 10px;font-size:12px;margin:2px}
+    .item-btn{padding:4px 2px;width: 54px; height: 54px;}
+    .item-btn iconify-icon { font-size: 28px; }
     .frag-btn{padding:6px 8px;font-size:11px;margin:2px}
     #logPanel{padding:8px;min-height:80px}
     #logList{font-size:10px;line-height:1.3;max-height:100px}
@@ -268,53 +347,16 @@
   
   /* ===== 手机端结算界面专属修复 ===== */
   @media(max-width: 600px) {
-    #gameOverPanel {
-      padding: 20px 16px !important;
-      border-radius: 16px !important;
-    }
-    #gameOverPanel h2 {
-      font-size: 28px !important;
-      letter-spacing: 2px !important;
-      margin-bottom: 10px !important;
-    }
-    #gameOverPanel .winner-name {
-      font-size: 13px !important;
-      padding: 4px 12px !important;
-    }
-    .rank-row {
-      padding: 8px 10px !important;
-      gap: 4px !important;
-    }
-    .rank-name {
-      padding-left: 4px !important;
-      display: flex !important;
-      align-items: center !important;
-      flex-wrap: wrap !important;
-    }
-    .rank-stats {
-      flex-shrink: 0 !important;
-      font-size: 11px !important;
-      gap: 6px !important;
-    }
-    .rank-stats span {
-      padding: 2px 4px !important;
-    }
-    .rank-name span {
-      font-size: 10px !important;
-      margin-left: 4px !important;
-      white-space: nowrap !important;
-      background: rgba(239, 68, 68, 0.1) !important;
-      padding: 1px 4px !important;
-      border-radius: 4px !important;
-      display: inline-block !important;
-    }
-    .rank-num {
-      width: 28px !important;
-      font-size: 14px !important;
-    }
-    .stat-item {
-      padding: 8px 10px !important;
-    }
+    #gameOverPanel { padding: 20px 16px !important; border-radius: 16px !important; }
+    #gameOverPanel h2 { font-size: 28px !important; letter-spacing: 2px !important; margin-bottom: 10px !important; }
+    #gameOverPanel .winner-name { font-size: 13px !important; padding: 4px 12px !important; }
+    .rank-row { padding: 8px 10px !important; gap: 4px !important; }
+    .rank-name { padding-left: 4px !important; display: flex !important; align-items: center !important; flex-wrap: wrap !important; }
+    .rank-stats { flex-shrink: 0 !important; font-size: 11px !important; gap: 6px !important; }
+    .rank-stats span { padding: 2px 4px !important; }
+    .rank-name span { font-size: 10px !important; margin-left: 4px !important; white-space: nowrap !important; background: rgba(239, 68, 68, 0.1) !important; padding: 1px 4px !important; border-radius: 4px !important; display: inline-block !important; }
+    .rank-num { width: 28px !important; font-size: 14px !important; }
+    .stat-item { padding: 8px 10px !important; }
   }
 
 </style>
@@ -327,7 +369,7 @@
   <div id="lobby">
     <div class="header-box">
       <h1>裂隙棋盘</h1>
-      <div class="sub">局域网联机 · v10</div>
+      <div class="sub">局域网联机 · v10.2</div>
       <div class="disclaimer">个人非商业项目 · 完全免费 · 不收取任何费用</div>
     </div>
     <div class="card">
@@ -495,17 +537,19 @@
 const socket = io();
 const CONFIG = { SIZE: 16, TILE: 45, SMALL_SIZE: 7, SMALL_TILE: 90, FOG_VIEW: 7 };
 
+// ★ 大棋盘替换为 Iconify 图标
 const BIG_ITEM_DEFS = {
-  'item_0': { glyph: '疾', name: '疾行符', desc: '选相邻格立即移动1格，不占冷却', select: true },
-  'item_1': { glyph: '传', name: '传送卷轴', desc: '沿直线≤5格传送到已探索格', select: true },
-  'item_2': { glyph: '扫', name: '扫描仪', desc: '周围5格显形10秒', select: false },
-  'item_3': { glyph: '盾', name: '护盾符', desc: '获得1层护盾', select: false },
-  'item_4': { glyph: '障', name: '路障', desc: '在相邻空格放置路障15秒', select: true },
-  'item_5': { glyph: '钥', name: '裂隙钥匙', desc: '下次裂隙等待减半，小棋盘多1道具', select: false },
-  'item_6': { glyph: '医', name: '医疗包', desc: '恢复1点生命', select: false },
-  'item_7': { glyph: '染', name: '负面传染', desc: '不占行动，将自身剩余的失控/疲惫时间复制给上下左右4格玩家', select: false },
-  'item_8': { glyph: '乱', name: '失控干扰器', desc: '使周围3×3内其他玩家失控一回合', select: false }
+  'item_0': { glyph: '<iconify-icon class="c-cyan" icon="game-icons:running-shoe"></iconify-icon>', name: '疾行符', desc: '选相邻格立即移动1格，不占冷却', select: true },
+  'item_1': { glyph: '<iconify-icon class="c-cyan" icon="game-icons:portal"></iconify-icon>', name: '传送卷轴', desc: '沿直线≤5格传送到已探索格', select: true },
+  'item_2': { glyph: '<iconify-icon class="c-cyan" icon="game-icons:radar-dish"></iconify-icon>', name: '扫描仪', desc: '周围5格显形10秒', select: false },
+  'item_3': { glyph: '<iconify-icon class="c-green" icon="game-icons:checked-shield"></iconify-icon>', name: '护盾符', desc: '获得1层护盾', select: false },
+  'item_4': { glyph: '<iconify-icon class="c-gold" icon="game-icons:barricade"></iconify-icon>', name: '路障', desc: '在相邻空格放置路障15秒', select: true },
+  'item_5': { glyph: '<iconify-icon class="c-gold" icon="game-icons:skeleton-key"></iconify-icon>', name: '裂隙钥匙', desc: '下次裂隙等待减半，小棋盘多1道具', select: false },
+  'item_6': { glyph: '<iconify-icon class="c-green" icon="game-icons:health-increase"></iconify-icon>', name: '医疗包', desc: '恢复1点生命', select: false },
+  'item_7': { glyph: '<iconify-icon class="c-purple" icon="game-icons:biohazard"></iconify-icon>', name: '负面传染', desc: '不占行动，将自身剩余的失控/疲惫时间复制给上下左右4格玩家', select: false },
+  'item_8': { glyph: '<iconify-icon class="c-red" icon="game-icons:brain-freeze"></iconify-icon>', name: '失控干扰器', desc: '使周围3×3内其他玩家失控一回合', select: false }
 };
+// ★ 小棋盘保持汉字，Canvas直接画
 const SMALL_ITEM_DEFS = {
   push: { glyph: '推', name: '推挤', desc: '将对手沿最近控制点反方向推1格' },
   block: { glyph: '封', name: '封锁', desc: '封锁一个未被占领的控制点2回合，不占行动' },
@@ -523,6 +567,8 @@ function hexToRgba(hex, alpha) {
 }
 
 let audioCtx = null;
+const USE_MP3 = true;               // ★ 回退合成音频：把这行改成 false 即可
+const mp3Cache = {};
 let muted = localStorage.getItem('rift_muted') === '1';
 function initAudio() {
   if (audioCtx) {
@@ -586,7 +632,7 @@ function playTone(freq, dur, type, vol, slide) {
 }
 
 function playSound(id) {
-  if (muted || !audioCtx) return;
+  if (muted) return;
   const def = SOUND_DEFS[id];
   if (!def) return;
   const now = performance.now();
@@ -594,6 +640,25 @@ function playSound(id) {
     if (soundLastPlayed[id] && now - soundLastPlayed[id] < 80) return;
     soundLastPlayed[id] = now;
   }
+
+  // ★ MP3 分支
+  if (USE_MP3) {
+    const url = '/sfx/' + id + '.wav';
+    let a = mp3Cache[url];
+    if (!a) {
+      a = new Audio(url);
+      a.preload = 'auto';
+      mp3Cache[url] = a;
+    }
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    a.volume = isMobile ? 0.9 : 0.5;
+    try { a.currentTime = 0; } catch (e) {}
+    a.play().catch(() => {});
+    return;
+  }
+
+  // ★ 合成音频分支（原逻辑，未改动）
+  if (!audioCtx) return;
   playTone(def.freq, def.dur, def.type, def.vol, def.slide);
   if (def.second) setTimeout(() => playTone(def.second, def.dur, def.type, def.vol * 0.9, 0), Math.round(def.dur * 600));
   if (def.third) setTimeout(() => playTone(def.third, def.dur, def.type, def.vol * 0.85, 0), Math.round(def.dur * 1200));
@@ -1553,7 +1618,6 @@ function updatePanels() {
   if (itemsPanel) itemsPanel.style.display = inSmall ? 'none' : 'block';
   if (playerPanel) playerPanel.style.display = inSmall ? 'none' : 'block';
   
-  // 控制小棋盘左右面板的显隐
   if (smallLeftPanel) smallLeftPanel.style.display = inSmall ? 'flex' : 'none';
   if (smallRightPanel) smallRightPanel.style.display = inSmall ? 'flex' : 'none';
 
@@ -1579,19 +1643,19 @@ function updatePanels() {
 
   const hpStr = '♥'.repeat(Math.max(0, me.hp)) + '♡'.repeat(Math.max(0, 3 - me.hp));
   document.getElementById('myHp').textContent = me.alive ? hpStr : '已淘汰';
-  document.getElementById('myShields').textContent = me.shields > 0 ? '🛡×' + me.shields : '';
+  document.getElementById('myShields').innerHTML = me.shields > 0 ? '<iconify-icon icon="game-icons:checked-shield" style="font-size:14px;vertical-align:middle;margin-right:2px;color:#94a3b8;"></iconify-icon>×' + me.shields : '';
   document.getElementById('myFragments').textContent = myState.myFragments > 0 ? '残片×' + myState.myFragments : '';
 
   const tags = [];
-  if (myState.myScanRemaining > 0) tags.push(`<span class="status-tag scan">扫描 ${Math.ceil(myState.myScanRemaining/1000)}s</span>`);
-  if (myState.myVisionRemaining > 0) tags.push(`<span class="status-tag vision">视野+1 ${Math.ceil(myState.myVisionRemaining/1000)}s</span>`);
-  if (myState.myInsightRemaining > 0) tags.push(`<span class="status-tag insight">洞察 ${Math.ceil(myState.myInsightRemaining/1000)}s</span>`);
-  if (myState.myImmuneRemaining > 0) tags.push(`<span class="status-tag immune">免疫控制 ${Math.ceil(myState.myImmuneRemaining/1000)}s</span>`);
+  if (myState.myScanRemaining > 0) tags.push(`<span class="status-tag scan"><iconify-icon icon="game-icons:radar-sweep"></iconify-icon> 扫描 ${Math.ceil(myState.myScanRemaining/1000)}s</span>`);
+  if (myState.myVisionRemaining > 0) tags.push(`<span class="status-tag vision"><iconify-icon icon="game-icons:eye"></iconify-icon> 视野+1 ${Math.ceil(myState.myVisionRemaining/1000)}s</span>`);
+  if (myState.myInsightRemaining > 0) tags.push(`<span class="status-tag insight"><iconify-icon icon="game-icons:magic-swirl"></iconify-icon> 洞察 ${Math.ceil(myState.myInsightRemaining/1000)}s</span>`);
+  if (myState.myImmuneRemaining > 0) tags.push(`<span class="status-tag immune"><iconify-icon icon="game-icons:aura"></iconify-icon> 免疫 ${Math.ceil(myState.myImmuneRemaining/1000)}s</span>`);
   const hasFakeHint = (myState.myRiftHints || []).some(h => h.fake);
-  if (hasFakeHint) tags.push(`<span class="status-tag decoy">受干扰</span>`);
+  if (hasFakeHint) tags.push(`<span class="status-tag decoy"><iconify-icon icon="game-icons:spawn-node"></iconify-icon> 受干扰</span>`);
   if (myState.myDisoriented) {
     const disorSec = Math.max(0, Math.ceil((localDisorientRemaining - (performance.now() - lastDisorientUpdate)) / 1000));
-    tags.push(`<span class="status-tag disoriented">失控 <span class="disor-num">${disorSec}</span>s</span>`);
+    tags.push(`<span class="status-tag disoriented"><iconify-icon icon="game-icons:vertigo"></iconify-icon> 失控 <span class="disor-num">${disorSec}</span>s</span>`);
   }
   document.getElementById('statusTags').innerHTML = tags.join('');
 
@@ -1638,7 +1702,7 @@ function renderRelicRow(me) {
   if (!relic) { relicRow.style.display = 'none'; return; }
   const def = SMALL_ITEM_DEFS[relic] || { glyph: '?', name: '?' };
   relicRow.style.display = 'block';
-  relicBadge.innerHTML = def.glyph + ' ' + escapeHtml(def.name);
+  relicBadge.innerHTML = def.glyph + ' ' + escapeHtml(def.name); // 这里自带 HTML 标签，直接渲染
 }
 
 function renderLogs() {
@@ -1666,9 +1730,13 @@ function renderBigItems(me) {
         const sel = pendingItemUse && pendingItemUse.itemIdx === idx;
         const cls = ['item-btn'];
         if (sel) cls.push('selected');
-        // 添加丢弃按钮
+        
         return `<div class="item-wrapper">
-          <span class="${cls.join(' ')}" data-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">${idx + 1} ${def.glyph} ${def.name}</span>
+          <span class="${cls.join(' ')}" data-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">
+            <span class="item-shortcut">${idx + 1}</span>
+            ${def.glyph} 
+            <span class="item-name">${def.name}</span>
+          </span>
           <span class="drop-btn" data-drop-idx="${idx}" title="丢弃此道具">×</span>
         </div>`;
       }).join('');
@@ -1742,7 +1810,11 @@ function renderSmallItems() {
     } else {
       el.innerHTML = items.map((itemType, idx) => {
         const def = SMALL_ITEM_DEFS[itemType] || { glyph: '?', name: '?' };
-        return `<span class="item-btn small-item-btn" data-small-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">${idx + 1} ${def.glyph} ${def.name}</span>`;
+        return `<span class="item-btn small-item-btn" data-small-item-idx="${idx}" title="${escapeHtml(def.desc || '')}">
+          <span class="item-shortcut">${idx + 1}</span>
+          <span style="font-size:20px;margin-bottom:4px;">${def.glyph}</span>
+          <span class="item-name">${def.name}</span>
+        </span>`;
       }).join('');
     }
   }
@@ -1842,9 +1914,20 @@ function tickCooldown() {
   }
 
   if (!me.alive) { document.getElementById('cooldownBar').style.width = '0%'; document.getElementById('cooldownText').textContent = '观战中'; return; }
-  if (me.waitingRiftId) { document.getElementById('cooldownBar').style.width = '0%'; document.getElementById('cooldownText').textContent = '等待匹配中'; return; }
   
   const elapsed = performance.now() - lastCooldownUpdate;
+  
+  if (me.waitingRiftId) { 
+    document.getElementById('cooldownBar').style.width = '0%'; 
+    document.getElementById('cooldownText').textContent = '等待匹配中'; 
+    // 新增：平滑更新等待时间
+    if (waitingBanner.style.display === 'block') {
+      const remain = Math.max(0, (me.riftWaitRemaining || 0) - elapsed);
+      waitingBanner.textContent = '正在等待裂隙匹配（' + Math.ceil(remain / 1000) + 's）';
+    }
+    return; 
+  }
+  
   const remaining = Math.max(0, (me.cooldownRemaining || 0) - elapsed);
   const total = 3000 + ((me.fatigueRemaining && me.fatigueRemaining > 0) ? 1000 : 0);
   const pct = Math.max(0, Math.min(100, (1 - remaining / total) * 100));
@@ -1930,7 +2013,7 @@ document.addEventListener('pointerdown', e => {
     const idx = parseInt(dbtn.dataset.dropIdx);
     if (pendingItemUse && pendingItemUse.itemIdx === idx) pendingItemUse = null;
     socket.emit('drop_item', { itemIdx: idx }, res => {
-      if (res && res.ok) playSound('blocked'); // 用阻断音效替代丢弃音效
+      if (res && res.ok) playSound('blocked');
       else if (res && !res.ok) flashMessage(res.error || '丢弃失败');
     });
     return; 
