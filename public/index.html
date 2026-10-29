@@ -566,41 +566,143 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/* ================================================================
+   ★ 音频系统 v11：迷雾感 + 梦境感（纯 Web Audio 实时合成）
+   - master 链：干信号 + 短延迟残响
+   - 3 种染色风格：dry（清晰）/ lightDream（轻迷雾轻梦境）/ fogDream（重）
+   - detune ±8 音分
+   - 移动端保持原 5 倍增益 + DynamicsCompressor
+   ================================================================ */
 let audioCtx = null;
-const USE_MP3 = true;               // ★ 回退合成音频：把这行改成 false 即可
-const mp3Cache = {};
+let audioMaster = null;
+let audioDelay = null;
+let audioFeedback = null;
+let audioWetGain = null;
 let muted = localStorage.getItem('rift_muted') === '1';
+
 function initAudio() {
   if (audioCtx) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return;
   }
-  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; return; }
+
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  audioMaster = audioCtx.createGain();
+  audioMaster.gain.value = 1.0;
+
+  audioDelay = audioCtx.createDelay(1.0);
+  audioDelay.delayTime.value = 0.11;
+  audioFeedback = audioCtx.createGain();
+  audioFeedback.gain.value = 0.22;
+  audioWetGain = audioCtx.createGain();
+  audioWetGain.gain.value = 0.55;
+  audioDelay.connect(audioFeedback);
+  audioFeedback.connect(audioDelay);
+  audioDelay.connect(audioWetGain);
+  audioWetGain.connect(audioMaster);
+
+  if (isMobile) {
+    const compressor = audioCtx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-50, audioCtx.currentTime);
+    compressor.knee.setValueAtTime(40, audioCtx.currentTime);
+    compressor.ratio.setValueAtTime(12, audioCtx.currentTime);
+    compressor.attack.setValueAtTime(0, audioCtx.currentTime);
+    compressor.release.setValueAtTime(0.25, audioCtx.currentTime);
+    audioMaster.connect(compressor);
+    compressor.connect(audioCtx.destination);
+  } else {
+    audioMaster.connect(audioCtx.destination);
+  }
 }
 
+// ★ 55 个音效定义表（style: 'dry' 清晰 | 'lightDream' 轻迷雾轻梦境 | 'fogDream' 重迷雾重梦境）
+// throttle：同音效最小间隔（ms）
 const SOUND_DEFS = {
-  move: { freq: 600, dur: 0.05, type: 'triangle', vol: 0.08, throttle: true },
-  teleport: { freq: 900, dur: 0.28, type: 'sine', vol: 0.12, slide: -650 },
-  pickup: { freq: 880, dur: 0.08, type: 'sine', vol: 0.10, second: 1320, throttle: true },
-  item: { freq: 520, dur: 0.12, type: 'triangle', vol: 0.08, throttle: true },
-  collapseWarn: { freq: 1200, dur: 0.04, type: 'sine', vol: 0.04, throttle: true },
-  collapseHit: { freq: 120, dur: 0.25, type: 'sawtooth', vol: 0.10, slide: -60, throttle: true },
-  riftBroadcast: { freq: 400, dur: 0.12, type: 'sine', vol: 0.05, throttle: true },
-  riftEnter: { freq: 300, dur: 0.3, type: 'sine', vol: 0.08, slide: 300 },
-  riftMatch: { freq: 440, dur: 0.12, type: 'sine', vol: 0.10, second: 660 },
-  smallTurn: { freq: 800, dur: 0.03, type: 'sine', vol: 0.03, throttle: true },
-  smallScore: { freq: 1000, dur: 0.06, type: 'sine', vol: 0.08, second: 1200, throttle: true },
-  dash: { freq: 800, dur: 0.15, type: 'sine', vol: 0.08, slide: -400, throttle: true },
-  hurt: { freq: 300, dur: 0.2, type: 'sawtooth', vol: 0.15, slide: -150 },
-  shield: { freq: 2000, dur: 0.08, type: 'sine', vol: 0.15 },
-  victory: { freq: 523, dur: 0.15, type: 'sine', vol: 0.15, second: 659, third: 784 },
-  defeat: { freq: 400, dur: 0.2, type: 'sine', vol: 0.15, second: 200 },
-  blessing: { freq: 660, dur: 0.08, type: 'sine', vol: 0.15, second: 880, third: 1100 },
-  blocked: { freq: 180, dur: 0.1, type: 'square', vol: 0.08, throttle: true }
+  /* ===== A 类：重迷雾 + 重梦境 ===== */
+  riftBroadcast: { freq: 400, dur: 0.12, type: 'sine', vol: 0.05, throttle: 300, style: 'fogDream' },
+  riftEnter:     { freq: 300, dur: 0.30, type: 'sine', vol: 0.08, slide: 300, style: 'fogDream' },
+  riftMatch:     { freq: 440, dur: 0.12, type: 'sine', vol: 0.10, second: 660, style: 'fogDream' },
+  riftTimeout:   { freq: 500, dur: 0.25, type: 'sine', vol: 0.10, slide: -180, style: 'fogDream' },
+  teleport:      { freq: 900, dur: 0.28, type: 'sine', vol: 0.12, slide: -650, style: 'fogDream' },
+
+  /* ===== B 类：轻迷雾 + 轻梦境 ===== */
+  move:          { freq: 600, dur: 0.05, type: 'triangle', vol: 0.08, throttle: 60, style: 'lightDream' },
+  moveFatigue:   { freq: 500, dur: 0.06, type: 'triangle', vol: 0.08, throttle: 60, style: 'lightDream' },
+  dash:          { freq: 800, dur: 0.15, type: 'sine', vol: 0.08, slide: -400, throttle: 80, style: 'lightDream' },
+  pickup:        { freq: 880, dur: 0.08, type: 'sine', vol: 0.10, second: 1320, throttle: 80, style: 'lightDream' },
+  itemUse:       { freq: 520, dur: 0.12, type: 'triangle', vol: 0.08, throttle: 80, style: 'lightDream' },
+  smallMove:     { freq: 720, dur: 0.05, type: 'triangle', vol: 0.08, throttle: 60, style: 'lightDream' },
+  smallDash:     { freq: 920, dur: 0.12, type: 'sine', vol: 0.09, slide: -300, style: 'lightDream' },
+  smallHold:     { freq: 360, dur: 0.14, type: 'sine', vol: 0.09, style: 'lightDream' },
+  smallTurn:     { freq: 800, dur: 0.03, type: 'sine', vol: 0.03, throttle: 80, style: 'lightDream' },
+  smallScore:    { freq: 1000, dur: 0.06, type: 'sine', vol: 0.08, second: 1200, throttle: 80, style: 'lightDream' },
+  smallItemUse:  { freq: 780, dur: 0.10, type: 'triangle', vol: 0.08, style: 'lightDream' },
+  smallWin:      { freq: 660, dur: 0.12, type: 'sine', vol: 0.12, second: 880, style: 'lightDream' },
+  smallLose:     { freq: 400, dur: 0.14, type: 'sine', vol: 0.10, slide: -120, style: 'lightDream' },
+  smallObserveEnd:{freq: 1200, dur: 0.14, type: 'sine', vol: 0.10, second: 1600, style: 'lightDream' },
+  collapseWarn:  { freq: 1200, dur: 0.04, type: 'sine', vol: 0.04, throttle: 80, style: 'lightDream' },
+  blessingAppear:{ freq: 660, dur: 0.08, type: 'sine', vol: 0.15, second: 880, third: 1100, style: 'lightDream' },
+  blessingConfirm:{freq: 780, dur: 0.12, type: 'sine', vol: 0.12, second: 1040, style: 'lightDream' },
+  relicAppear:   { freq: 580, dur: 0.10, type: 'sine', vol: 0.12, second: 780, style: 'lightDream' },
+  relicConfirm:  { freq: 720, dur: 0.12, type: 'sine', vol: 0.11, second: 960, style: 'lightDream' },
+  exchangeSuccess:{freq: 660, dur: 0.08, type: 'sine', vol: 0.10, second: 880, third: 1100, style: 'lightDream' },
+  joinRoom:      { freq: 660, dur: 0.10, type: 'sine', vol: 0.12, second: 880, style: 'lightDream' },
+  createRoom:    { freq: 550, dur: 0.10, type: 'sine', vol: 0.12, second: 825, third: 1100, style: 'lightDream' },
+  roomLocked:    { freq: 280, dur: 0.30, type: 'sine', vol: 0.10, slide: -40, throttle: 500, style: 'lightDream' },
+  finalPhase:    { freq: 440, dur: 0.35, type: 'sine', vol: 0.13, slide: 220, throttle: 500, style: 'lightDream' },
+  eliminated:    { freq: 360, dur: 0.25, type: 'sine', vol: 0.10, slide: -80, throttle: 500, style: 'lightDream' },
+  myEliminated:  { freq: 300, dur: 0.35, type: 'sine', vol: 0.12, slide: -160, throttle: 500, style: 'lightDream' },
+  victory:       { freq: 523, dur: 0.15, type: 'sine', vol: 0.15, second: 659, third: 784, style: 'lightDream' },
+  defeat:        { freq: 400, dur: 0.20, type: 'sine', vol: 0.15, second: 200, style: 'lightDream' },
+
+  /* ===== C 类：清晰（功能性优先） ===== */
+  hurt:          { freq: 300, dur: 0.20, type: 'sawtooth', vol: 0.15, slide: -150, style: 'dry' },
+  shieldGain:    { freq: 2000, dur: 0.08, type: 'sine', vol: 0.15, style: 'dry' },
+  shieldBlock:   { freq: 1500, dur: 0.10, type: 'square', vol: 0.12, slide: -400, style: 'dry' },
+  heal:          { freq: 520, dur: 0.20, type: 'sine', vol: 0.12, slide: 260, style: 'dry' },
+  fatigue:       { freq: 200, dur: 0.15, type: 'triangle', vol: 0.10, slide: -30, style: 'dry' },
+  disoriented:   { freq: 700, dur: 0.22, type: 'sawtooth', vol: 0.10, slide: -280, style: 'dry' },
+  disorientMove: { freq: 450, dur: 0.18, type: 'sawtooth', vol: 0.08, slide: -180, style: 'dry' },
+  immune:        { freq: 880, dur: 0.18, type: 'sine', vol: 0.13, slide: 180, style: 'dry' },
+  dangerDamage:  { freq: 180, dur: 0.22, type: 'sawtooth', vol: 0.13, slide: -80, style: 'dry' },
+  collapseHit:   { freq: 120, dur: 0.25, type: 'sawtooth', vol: 0.10, slide: -60, throttle: 80, style: 'dry' },
+  pickupFull:    { freq: 240, dur: 0.10, type: 'triangle', vol: 0.08, throttle: 100, style: 'dry' },
+  itemFail:      { freq: 280, dur: 0.12, type: 'triangle', vol: 0.10, slide: -80, throttle: 100, style: 'dry' },
+  dropItem:      { freq: 340, dur: 0.10, type: 'triangle', vol: 0.09, slide: -60, style: 'dry' },
+  riftCooldown:  { freq: 160, dur: 0.20, type: 'sawtooth', vol: 0.10, throttle: 100, style: 'dry' },
+  smallBlock:    { freq: 420, dur: 0.10, type: 'square', vol: 0.10, style: 'dry' },
+  smallTrap:     { freq: 900, dur: 0.08, type: 'square', vol: 0.10, slide: -300, style: 'dry' },
+  smallStun:     { freq: 220, dur: 0.20, type: 'sawtooth', vol: 0.10, slide: -40, style: 'dry' },
+  exchangeFail:  { freq: 260, dur: 0.14, type: 'triangle', vol: 0.10, slide: -100, throttle: 100, style: 'dry' },
+  blockedCooldown:{freq: 180, dur: 0.10, type: 'square', vol: 0.08, throttle: 100, style: 'dry' },
+  blockedInvalid:{ freq: 400, dur: 0.10, type: 'triangle', vol: 0.08, slide: -200, throttle: 100, style: 'dry' },
+  blockedFull:   { freq: 250, dur: 0.12, type: 'triangle', vol: 0.08, throttle: 100, style: 'dry' },
+  uiToggle:      { freq: 1000, dur: 0.06, type: 'sine', vol: 0.10, throttle: 80, style: 'dry' }
 };
 const soundLastPlayed = {};
 
-function playTone(freq, dur, type, vol, slide) {
+// ★ 将源节点按 style 接入 master（低通 + 湿信号）
+function connectWithStyle(srcNode, style) {
+  if (style === 'dry') {
+    srcNode.connect(audioMaster);
+    return;
+  }
+  const isHeavy = style === 'fogDream';
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = isHeavy ? 900 : 1800;
+  lp.Q.value = 0.7;
+  srcNode.connect(lp);
+  lp.connect(audioMaster);
+  const sendGain = audioCtx.createGain();
+  sendGain.gain.value = isHeavy ? 0.4 : 0.18;
+  lp.connect(sendGain);
+  sendGain.connect(audioDelay);
+}
+
+function playTone(freq, dur, type, vol, slide, style) {
   if (!audioCtx || muted) return;
   try {
     const t = audioCtx.currentTime;
@@ -609,60 +711,42 @@ function playTone(freq, dur, type, vol, slide) {
     osc.type = type || 'sine';
     osc.frequency.setValueAtTime(freq, t);
     if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
-    
+
+    // ★ 梦境感核心：轻微失谐 ±8 音分
+    if (style === 'lightDream' || style === 'fogDream') {
+      osc.detune.setValueAtTime((Math.random() * 2 - 1) * 8, t);
+    }
+
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const boost = isMobile ? 5.0 : 1.0;
-    
-    gain.gain.setValueAtTime((vol || 0.1) * boost, t);
+    const fogBoost = (style === 'fogDream' || style === 'lightDream') ? 1.15 : 1.0;
+
+    gain.gain.setValueAtTime((vol || 0.1) * boost * fogBoost, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    
-    if (isMobile) {
-      const compressor = audioCtx.createDynamicsCompressor();
-      compressor.threshold.setValueAtTime(-50, t);
-      compressor.knee.setValueAtTime(40, t);
-      compressor.ratio.setValueAtTime(12, t);
-      compressor.attack.setValueAtTime(0, t);
-      compressor.release.setValueAtTime(0.25, t);
-      osc.connect(gain); gain.connect(compressor); compressor.connect(audioCtx.destination);
-    } else {
-      osc.connect(gain); gain.connect(audioCtx.destination);
-    }
+
+    osc.connect(gain);
+    connectWithStyle(gain, style || 'dry');
+
     osc.start(t); osc.stop(t + dur);
   } catch (e) {}
 }
 
 function playSound(id) {
-  if (muted) return;
+  if (muted || !audioCtx) return;
   const def = SOUND_DEFS[id];
   if (!def) return;
   const now = performance.now();
   if (def.throttle) {
-    if (soundLastPlayed[id] && now - soundLastPlayed[id] < 80) return;
+    if (soundLastPlayed[id] && now - soundLastPlayed[id] < def.throttle) return;
     soundLastPlayed[id] = now;
   }
-
-  // ★ MP3 分支
-  if (USE_MP3) {
-    const url = '/sfx/' + id + '.wav';
-    let a = mp3Cache[url];
-    if (!a) {
-      a = new Audio(url);
-      a.preload = 'auto';
-      mp3Cache[url] = a;
-    }
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    a.volume = isMobile ? 0.9 : 0.5;
-    try { a.currentTime = 0; } catch (e) {}
-    a.play().catch(() => {});
-    return;
-  }
-
-  // ★ 合成音频分支（原逻辑，未改动）
-  if (!audioCtx) return;
-  playTone(def.freq, def.dur, def.type, def.vol, def.slide);
-  if (def.second) setTimeout(() => playTone(def.second, def.dur, def.type, def.vol * 0.9, 0), Math.round(def.dur * 600));
-  if (def.third) setTimeout(() => playTone(def.third, def.dur, def.type, def.vol * 0.85, 0), Math.round(def.dur * 1200));
+  playTone(def.freq, def.dur, def.type, def.vol, def.slide, def.style);
+  if (def.second) setTimeout(() => playTone(def.second, def.dur, def.type, def.vol * 0.9, 0, def.style), Math.round(def.dur * 600));
+  if (def.third) setTimeout(() => playTone(def.third, def.dur, def.type, def.vol * 0.85, 0, def.style), Math.round(def.dur * 1200));
 }
+/* ================================================================
+   音频系统结束
+   ================================================================ */
 
 let effects = [];
 let effNow = 0;
@@ -844,6 +928,7 @@ function flashMessage(msg, duration) {
 }
 function updateMuteBtn() { muteBtn.textContent = muted ? '🔇' : '🔔'; }
 muteBtn.addEventListener('click', () => {
+  playSound('uiToggle');   // ★ 新增：静音开关反馈
   muted = !muted;
   localStorage.setItem('rift_muted', muted ? '1' : '0');
   updateMuteBtn();
@@ -864,6 +949,7 @@ document.getElementById('createBtn').onclick = () => {
   const name = document.getElementById('nameInput').value.trim();
   socket.emit('create_room', { name, mode: selectedMode }, res => {
     if (!res || !res.ok) { errorMsg.textContent = (res && res.error) || '创建失败'; return; }
+    playSound('createRoom');   // ★ 新增：创建房间成功
     onJoined(res);
   });
 };
@@ -875,6 +961,7 @@ document.getElementById('joinBtn').onclick = () => {
   if (!code) { errorMsg.textContent = '请输入房间码'; return; }
   socket.emit('join_room', { name, code }, res => {
     if (!res || !res.ok) { errorMsg.textContent = (res && res.error) || '加入失败'; return; }
+    playSound('joinRoom');   // ★ 新增：加入房间成功
     onJoined(res);
   });
 };
@@ -927,6 +1014,7 @@ roomListBody.addEventListener('pointerdown', e => {
   const name = document.getElementById('nameInput').value.trim();
   socket.emit('join_room', { name, code }, res => {
     if (!res || !res.ok) { errorMsg.textContent = (res && res.error) || '加入失败'; return; }
+    playSound('joinRoom');   // ★ 新增：点列表加入房间成功
     onJoined(res);
   });
 });
@@ -991,13 +1079,14 @@ function detectEvents(s) {
   if (s.myDisoriented && !prevDisoriented) {
     addEffect('disorientBurst', me.x, me.y, 600, null, 'unit');
     flashMessage('你被失控干扰了！下次移动方向随机', 2000);
+    playSound('disoriented');   // ★ 新增：被失控施加
     disorientedStartPos = { x: me.x, y: me.y };
   }
   if (!s.myDisoriented && prevDisoriented) {
     const moved = disorientedStartPos && (me.x !== disorientedStartPos.x || me.y !== disorientedStartPos.y);
     if (moved) {
       addEffect('disorientBurst', me.x, me.y, 500, null, 'unit');
-      playSound('move');
+      playSound('disorientMove');   // ★ 改动：失控自动移动用专属音效
       flashMessage('失控：自动移动了一格', 1500);
       visualPositions[me.id] = { x: me.x, y: me.y };
     } else {
@@ -1006,6 +1095,15 @@ function detectEvents(s) {
     disorientedStartPos = null;
   }
   prevDisoriented = !!s.myDisoriented;
+
+  // ★ 新增：免疫获得
+  if (s.myImmuneRemaining > 0 && (!prevState || !(prevState.myImmuneRemaining > 0))) {
+    playSound('immune');
+  }
+  // ★ 新增：疲惫获得（从无到有）
+  if (s.myFatigueRemaining > 0 && (!prevState || !(prevState.myFatigueRemaining > 0))) {
+    playSound('fatigue');
+  }
 
   if (s.collapse.warnCell && !prevCollapseWarnCell) {
     if (canSeeCell(s.collapse.warnCell.x, s.collapse.warnCell.y, s)) playSound('collapseWarn');
@@ -1021,13 +1119,20 @@ function detectEvents(s) {
   if (me.hp !== undefined && me.hp < prevHp && me.alive) {
     addEffect('hurtFlash', me.x, me.y, 300, null, 'unit');
     addEffect('floatText', me.x, me.y, 600, { text: '-' + (prevHp - me.hp), color: '#dc2626' }, 'ui');
-    playSound('hurt');
+    // ★ 改动：站在 DANGER 格时区分危险区扣血
+    const myTile = (s.tiles[me.y] && s.tiles[me.y][me.x] !== undefined) ? s.tiles[me.y][me.x] : null;
+    if (myTile === 4) playSound('dangerDamage');
+    else playSound('hurt');
   }
   if (me.hp !== undefined) prevHp = me.hp;
 
   if (me.shields !== undefined && me.shields > prevShields) {
     addEffect('shieldRing', me.x, me.y, 300, null, 'unit');
-    playSound('shield');
+    playSound('shieldGain');   // ★ 改动：获得护盾
+  }
+  // ★ 新增：护盾被消耗（shields 减少但 hp 不变）
+  if (me.shields !== undefined && me.shields < prevShields && me.hp === prevHp) {
+    playSound('shieldBlock');
   }
   if (me.shields !== undefined) prevShields = me.shields;
 
@@ -1072,16 +1177,48 @@ function detectEvents(s) {
       const d = Math.abs(s.small.myPos.x - prevSm.myPos.x) + Math.abs(s.small.myPos.y - prevSm.myPos.y);
       if (d === 2) {
         addEffect('dashTrail', prevSm.myPos.x, prevSm.myPos.y, 300, null, 'unit');
-        playSound('dash');
+        playSound('smallDash');   // ★ 改动：小棋盘冲刺用专属音效
       }
     }
+    // ★ 新增：观察期结束
+    if (prevState && prevState.small && prevState.small.inObserve && !s.small.inObserve) {
+      playSound('smallObserveEnd');
+    }
   } else {
-    if (prevState && prevState.small) effects = [];
+    if (prevState && prevState.small) {
+      effects = [];
+      // ★ 新增：小棋盘结算胜负（仅当自己参与时）
+      const pm = prevState.small;
+      if (pm && pm.myScore !== undefined && pm.oppScore !== undefined) {
+        if (pm.myScore > pm.oppScore) playSound('smallWin');
+        else if (pm.myScore < pm.oppScore) playSound('smallLose');
+      }
+    }
     prevSmallTurnCount = -1;
     prevSmallMyScore = 0;
   }
 
-  if (s.myPendingBlessing && !(prevState && prevState.myPendingBlessing)) playSound('blessing');
+  if (s.myPendingBlessing && !(prevState && prevState.myPendingBlessing)) playSound('blessingAppear');
+  // ★ 新增：信物面板出现
+  if (s.myPendingRelic && (!prevState || !prevState.myPendingRelic)) playSound('relicAppear');
+
+  // ★ 新增：房间锁定
+  if (s.locked && (!prevState || !prevState.locked)) playSound('roomLocked');
+  // ★ 新增：最终收束
+  if (s.finalPhaseTriggered && (!prevState || !prevState.finalPhaseTriggered)) playSound('finalPhase');
+
+  // ★ 新增：他人淘汰 / 自己被淘汰
+  if (prevState) {
+    const prevMe = prevState.players.find(p => p.isMe);
+    if (prevMe && prevMe.alive && !me.alive) playSound('myEliminated');
+    else {
+      for (const p of s.players) {
+        if (p.id === me.id) continue;
+        const prevP = prevState.players.find(pp => pp.id === p.id);
+        if (prevP && prevP.alive && !p.alive) { playSound('eliminated'); break; }
+      }
+    }
+  }
 
   if (s.gameOver && !(prevState && prevState.gameOver)) {
     if (me.alive && me.id === s.winnerId) playSound('victory');
@@ -1702,7 +1839,7 @@ function renderRelicRow(me) {
   if (!relic) { relicRow.style.display = 'none'; return; }
   const def = SMALL_ITEM_DEFS[relic] || { glyph: '?', name: '?' };
   relicRow.style.display = 'block';
-  relicBadge.innerHTML = def.glyph + ' ' + escapeHtml(def.name); // 这里自带 HTML 标签，直接渲染
+  relicBadge.innerHTML = def.glyph + ' ' + escapeHtml(def.name);
 }
 
 function renderLogs() {
@@ -1920,7 +2057,6 @@ function tickCooldown() {
   if (me.waitingRiftId) { 
     document.getElementById('cooldownBar').style.width = '0%'; 
     document.getElementById('cooldownText').textContent = '等待匹配中'; 
-    // 新增：平滑更新等待时间
     if (waitingBanner.style.display === 'block') {
       const remain = Math.max(0, (me.riftWaitRemaining || 0) - elapsed);
       waitingBanner.textContent = '正在等待裂隙匹配（' + Math.ceil(remain / 1000) + 's）';
@@ -1960,7 +2096,7 @@ function onBigItemClick(idx) {
   if (itemId === 'item_7') {
     if ((myState.myFatigueRemaining || 0) <= 0 && !myState.myDisoriented) {
       flashMessage('你当前没有可传染的负面状态');
-      playSound('blocked');
+      playSound('itemFail');   // ★ 改动：专属失败音
       return;
     }
   }
@@ -1969,7 +2105,7 @@ function onBigItemClick(idx) {
   const remaining = (me.cooldownRemaining || 0) - elapsed;
   if (itemId !== 'item_0' && itemId !== 'item_7' && remaining > 0) {
     flashMessage('冷却中，无法使用道具');
-    playSound('blocked');
+    playSound('blockedCooldown');   // ★ 改动：冷却专属
     return;
   }
   if (pendingItemUse && pendingItemUse.itemIdx === idx) {
@@ -1977,32 +2113,33 @@ function onBigItemClick(idx) {
   }
   if (def.select) {
     pendingItemUse = { itemIdx: idx, itemId };
+    playSound('itemUse');   // ★ 新增：进入选格模式反馈
     updatePanels(); return;
   }
   socket.emit('use_item', { itemIdx: idx }, res => {
-    if (res && res.ok) playSound('item');
-    else if (res && !res.ok) { flashMessage(res.error || '使用失败'); playSound('blocked'); }
+    if (res && res.ok) playSound('itemUse');   // ★ 改动
+    else if (res && !res.ok) { flashMessage(res.error || '使用失败'); playSound('itemFail'); }   // ★ 改动
   });
 }
 function onSmallItemClick(idx) {
   if (!myState || !myState.small) return;
   const sm = myState.small;
-  if (sm.inObserve) { flashMessage('观察期内不可操作'); return; }
+  if (sm.inObserve) { flashMessage('观察期内不可操作'); playSound('blockedInvalid'); return; }   // ★ 新增
   if (idx < 0 || idx >= sm.myItems.length) return;
   
   // 封锁独立处理
   if (sm.myItems[idx] === 'block') {
     socket.emit('small_action', { type: 'use_block' }, res => {
-      if (res && res.ok) playSound('item');
-      else if (res && !res.ok) { flashMessage(res.error || '封锁失败'); playSound('blocked'); }
+      if (res && res.ok) playSound('smallBlock');   // ★ 改动：封锁专属
+      else if (res && !res.ok) { flashMessage(res.error || '封锁失败'); playSound('blockedInvalid'); }   // ★ 改动
     });
     return;
   }
 
   // 普通道具
   socket.emit('small_action', { type: 'item', itemIdx: idx }, res => {
-    if (res && res.ok) playSound('item');
-    else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
+    if (res && res.ok) playSound('smallItemUse');   // ★ 改动：小棋盘道具专属
+    else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blockedInvalid'); }   // ★ 改动
   });
 }
 
@@ -2013,8 +2150,8 @@ document.addEventListener('pointerdown', e => {
     const idx = parseInt(dbtn.dataset.dropIdx);
     if (pendingItemUse && pendingItemUse.itemIdx === idx) pendingItemUse = null;
     socket.emit('drop_item', { itemIdx: idx }, res => {
-      if (res && res.ok) playSound('blocked');
-      else if (res && !res.ok) flashMessage(res.error || '丢弃失败');
+      if (res && res.ok) playSound('dropItem');   // ★ 改动：从 blocked 改为专属 dropItem（原 bug）
+      else if (res && !res.ok) { flashMessage(res.error || '丢弃失败'); playSound('itemFail'); }   // ★ 改动
     });
     return; 
   }
@@ -2029,8 +2166,8 @@ document.addEventListener('pointerdown', e => {
   if (fbtn && !fbtn.disabled) {
     e.preventDefault();
     socket.emit('fragment_exchange', { idx: parseInt(fbtn.dataset.fragIdx) }, res => {
-      if (res && res.ok) playSound('pickup');
-      else if (res && !res.ok) { flashMessage(res.error || '兑换失败'); playSound('blocked'); }
+      if (res && res.ok) playSound('exchangeSuccess');   // ★ 改动：与 pickup 区分
+      else if (res && !res.ok) { flashMessage(res.error || '兑换失败'); playSound('exchangeFail'); }   // ★ 改动
     });
     return;
   }
@@ -2042,8 +2179,8 @@ document.addEventListener('pointerdown', e => {
     else {
       selectedBlessingId = null;
       socket.emit('choose_blessing', { id }, res => {
-        if (res && res.ok) playSound('blessing');
-        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blocked'); }
+        if (res && res.ok) playSound('blessingConfirm');   // ★ 改动：与 appear 区分
+        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blockedInvalid'); }   // ★ 改动
       });
     }
     return;
@@ -2056,8 +2193,8 @@ document.addEventListener('pointerdown', e => {
     else {
       selectedRelicIdx = null;
       socket.emit('choose_relic', { idx }, res => {
-        if (res && res.ok) playSound('pickup');
-        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blocked'); }
+        if (res && res.ok) playSound('relicConfirm');   // ★ 改动
+        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blockedInvalid'); }   // ★ 改动
       });
     }
     return;
@@ -2081,11 +2218,14 @@ window.addEventListener('keydown', e => {
     if (me && me.alive && me.x !== undefined && !me.waitingRiftId && !myState.small) {
       const nx = me.x + d[0], ny = me.y + d[1];
       const info = getTileValue(nx, ny);
-      if (!(info && info.tile === TILE_RIFT)) playSound('move');
+      if (!(info && info.tile === TILE_RIFT)) {
+        // ★ 改动：疲惫移动用专属音效
+        playSound((me.fatigueRemaining && me.fatigueRemaining > 0) ? 'moveFatigue' : 'move');
+      }
       addEffect('movePath', nx, ny, 300, { dx: d[0], dy: d[1], ts: CONFIG.TILE, color: me.color }, 'terrain');
     }
     socket.emit('move', { dx: d[0], dy: d[1] }, res => {
-      if (res && !res.ok && res.error) { flashMessage(res.error); playSound('blocked'); }
+      if (res && !res.ok && res.error) { flashMessage(res.error); playSound('blockedInvalid'); }   // ★ 改动
       if (res && res.ok && res.disoriented) {
         flashMessage('失控：移动方向被随机改变', 1500);
         disorientedStartPos = null;
@@ -2106,7 +2246,7 @@ canvas.addEventListener('click', e => {
 
   if (myState.small) {
     const sm = myState.small;
-    if (sm.inObserve) { flashMessage('观察期内不可操作'); return; }
+    if (sm.inObserve) { flashMessage('观察期内不可操作'); playSound('blockedInvalid'); return; }   // ★ 新增
     const TS = CONFIG.SMALL_TILE, size = CONFIG.SMALL_SIZE;
     const offX = (canvas.width - TS * size) / 2, offY = (canvas.height - TS * size) / 2;
     const x = Math.floor((cx - offX) / TS), y = Math.floor((cy - offY) / TS);
@@ -2114,36 +2254,37 @@ canvas.addEventListener('click', e => {
 
     const myPos = sm.myPos, oppPos = sm.oppPos;
     if (x === myPos.x && y === myPos.y) {
-      if (sm.myStunned || sm.myDashPenalty) { flashMessage('本回合被定身，无法驻守'); return; }
+      if (sm.myStunned || sm.myDashPenalty) { flashMessage('本回合被定身，无法驻守'); playSound('blockedCooldown'); return; }   // ★ 新增
       socket.emit('small_action', { type: 'hold' }, res => {
-        if (res && res.ok) playSound('smallTurn');
-        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
+        if (res && res.ok) playSound('smallHold');   // ★ 改动：驻守专属
+        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blockedInvalid'); }   // ★ 改动
       });
       return;
     }
-    if (x === oppPos.x && y === oppPos.y) { flashMessage('不能走到对手格子上'); return; }
+    if (x === oppPos.x && y === oppPos.y) { flashMessage('不能走到对手格子上'); playSound('blockedInvalid'); return; }   // ★ 新增
     const canMove = !sm.myStunned && !sm.myDashPenalty && !sm.myHoldPenalty;
-    if (!canMove) { flashMessage('本回合无法移动'); return; }
+    if (!canMove) { flashMessage('本回合无法移动'); playSound('blockedCooldown'); return; }   // ★ 新增
 
     const dx = x - myPos.x, dy = y - myPos.y;
     const d = Math.abs(dx) + Math.abs(dy);
     if (d === 1) {
-      if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); return; }
+      if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); playSound('blockedInvalid'); return; }   // ★ 新增
       socket.emit('small_action', { type: 'move', target: { x, y } }, res => {
-        if (res && res.ok) playSound('smallTurn');
-        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
+        if (res && res.ok) playSound('smallMove');   // ★ 改动：小棋盘移动专属
+        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blockedInvalid'); }   // ★ 改动
       });
     } else if (d === 2 && (dx === 0 || dy === 0)) {
-      if (sm.myDashPenalty) { flashMessage('冲刺惩罚中'); return; }
+      if (sm.myDashPenalty) { flashMessage('冲刺惩罚中'); playSound('blockedCooldown'); return; }   // ★ 新增
       const midX = myPos.x + dx / 2, midY = myPos.y + dy / 2;
-      if (sm.blockades.some(bd => bd.x === midX && bd.y === midY)) { flashMessage('冲刺路径被封锁'); return; }
-      if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); return; }
+      if (sm.blockades.some(bd => bd.x === midX && bd.y === midY)) { flashMessage('冲刺路径被封锁'); playSound('blockedInvalid'); return; }   // ★ 新增
+      if (sm.blockades.some(bd => bd.x === x && bd.y === y)) { flashMessage('目标格被封锁'); playSound('blockedInvalid'); return; }   // ★ 新增
       socket.emit('small_action', { type: 'dash', target: { x, y } }, res => {
-        if (res && res.ok) playSound('dash');
-        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blocked'); }
+        if (res && res.ok) playSound('smallDash');   // ★ 改动：小棋盘冲刺专属
+        else if (res && !res.ok) { flashMessage(res.error || '操作失败'); playSound('blockedInvalid'); }   // ★ 改动
       });
     } else {
       flashMessage('只能移动1格或直线冲刺2格');
+      playSound('blockedInvalid');   // ★ 新增
     }
     return;
   }
@@ -2157,9 +2298,9 @@ canvas.addEventListener('click', e => {
     socket.emit('use_item', { itemIdx: idx, target: { x, y } }, res => {
       if (res && res.ok) {
         if (usedItemId === 'item_1') playSound('teleport');
-        else playSound('item');
+        else playSound('itemUse');   // ★ 改动
       } else if (res && !res.ok) {
-        flashMessage(res.error || '使用失败'); playSound('blocked');
+        flashMessage(res.error || '使用失败'); playSound('itemFail');   // ★ 改动
       }
     });
     return;
@@ -2169,12 +2310,13 @@ canvas.addEventListener('click', e => {
   
   const info = getTileValue(x, y);
   if (!(info && info.tile === TILE_RIFT)) {
-    playSound('move');
+    // ★ 改动：疲惫移动用专属音效
+    playSound((me.fatigueRemaining && me.fatigueRemaining > 0) ? 'moveFatigue' : 'move');
     addEffect('movePath', x, y, 300, { dx: dx, dy: dy, ts: CONFIG.TILE, color: me.color }, 'terrain');
   }
   
   socket.emit('move', { dx, dy }, res => {
-    if (res && !res.ok && res.error) { flashMessage(res.error); playSound('blocked'); }
+    if (res && !res.ok && res.error) { flashMessage(res.error); playSound('blockedInvalid'); }   // ★ 改动
     if (res && res.ok && res.disoriented) {
       flashMessage('失控：移动方向被随机改变', 1500);
       disorientedStartPos = null;
