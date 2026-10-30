@@ -288,6 +288,8 @@
   .rank-row{display:flex;align-items:center;padding:10px 14px;border-radius:10px;margin-bottom:6px;font-size:14px;background:#f8fafc;transition:all 0.2s}
   .rank-row.me{background:#eff6ff;border:1px solid #bfdbfe;font-weight:600}
   .rank-row.winner{background:linear-gradient(90deg, #fef3c7 0%, #fffbeb 100%);border:1px solid #fde68a;font-weight:800;box-shadow:0 4px 12px rgba(245, 158, 11, 0.1)}
+  .rank-row.self-highlight{box-shadow:0 0 0 2px #3b82f6, 0 4px 12px rgba(59,130,246,0.15);animation:pulseSelf 1.5s infinite}
+    @keyframes pulseSelf{50%{box-shadow:0 0 0 4px rgba(59,130,246,0.4), 0 4px 12px rgba(59,130,246,0.15)}}
   .rank-num{width:40px;font-weight:900;color:#94a3b8;flex-shrink:0;font-size:16px}
   .rank-row.winner .rank-num{color:#d97706;font-size:18px}
   .rank-name{flex:1;padding-left:8px}
@@ -301,6 +303,7 @@
   /* ================= 灵动岛 Toast ================= */
   .flash-msg{position:fixed;top:-60px;left:50%;transform:translateX(-50%);background:rgba(30, 41, 59, 0.9);backdrop-filter:blur(10px);color:#fff;padding:10px 24px;border-radius:20px;font-size:14px;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.2), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;transition:all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);display:block;opacity:0;pointer-events:none;z-index:99999}
   .flash-msg.show{top:24px;opacity:1}
+  .flash-msg.success{background:rgba(22,163,74,0.92);box-shadow:0 10px 25px rgba(22,163,74,0.3), 0 0 0 1px rgba(255,255,255,0.1) inset}
 
   /* ================= 响应式 ================= */
   @media(max-width:1000px){
@@ -503,7 +506,10 @@
 
         <!-- 移动后的日志面板 -->
         <div id="logPanel">
-          <h3>日志</h3><div id="logList"></div>
+          <h3 style="display:flex; justify-content:space-between; align-items:center;">
+            日志 <span id="pingLabel" style="font-size:11px;color:#94a3b8;font-weight:normal;display:flex;align-items:center;gap:4px;"><span id="pingDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>-- ms</span>
+          </h3>
+          <div id="logList"></div>
         </div>
       </div>
     </div>
@@ -535,6 +541,23 @@
 
 <script>
 const socket = io();
+// ★ 新增：时间同步与延迟测量
+let serverOffset = null;
+let currentPing = 0;
+function estimateServerNow() { return Date.now() + (serverOffset || 0); }
+
+setInterval(() => {
+  if (!socket.connected) return;
+  const sent = Date.now();
+  socket.emit('ping_latency', () => {
+    currentPing = Date.now() - sent;
+    const el = document.getElementById('pingLabel');
+    const dot = document.getElementById('pingDot');
+    if (el && dot) {
+      el.innerHTML = `<span id="pingDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${currentPing < 80 ? '#16a34a' : currentPing < 200 ? '#eab308' : '#dc2626'};"></span>${currentPing} ms`;
+    }
+  });
+}, 2000);
 const CONFIG = { SIZE: 16, TILE: 45, SMALL_SIZE: 7, SMALL_TILE: 90, FOG_VIEW: 7 };
 
 // ★ 大棋盘替换为 Iconify 图标
@@ -918,8 +941,9 @@ const roomListCount = document.getElementById('roomListCount');
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-function flashMessage(msg, duration) {
+function flashMessage(msg, duration, type) {
   flashMsgEl.textContent = msg;
+  flashMsgEl.classList.toggle('success', type === 'success');
   flashMsgEl.classList.add('show');
   clearTimeout(flashMsgEl._t);
   flashMsgEl._t = setTimeout(() => { 
@@ -1021,6 +1045,9 @@ roomListBody.addEventListener('pointerdown', e => {
 
 let classicMobileHinted = false;
 socket.on('state', s => {
+    const measured = s.serverNow - Date.now();
+  if (serverOffset === null) serverOffset = measured;
+  else serverOffset = serverOffset * 0.9 + measured * 0.1; // EMA 平滑，抗网络抖动
   if (!classicMobileHinted && s.mode === 'CLASSIC' && window.innerWidth < 700) {
     classicMobileHinted = true;
     setTimeout(() => { flashMessage('手机推荐用迷雾模式，格子更大更好点', 4000); }, 800);
@@ -1090,7 +1117,7 @@ function detectEvents(s) {
       flashMessage('失控：自动移动了一格', 1500);
       visualPositions[me.id] = { x: me.x, y: me.y };
     } else {
-      flashMessage('失控状态解除', 1500);
+      flashMessage('失控状态解除', 1500, 'success');
     }
     disorientedStartPos = null;
   }
@@ -1177,7 +1204,20 @@ function detectEvents(s) {
       const d = Math.abs(s.small.myPos.x - prevSm.myPos.x) + Math.abs(s.small.myPos.y - prevSm.myPos.y);
       if (d === 2) {
         addEffect('dashTrail', prevSm.myPos.x, prevSm.myPos.y, 300, null, 'unit');
-        playSound('smallDash');   // ★ 改动：小棋盘冲刺用专属音效
+        playSound('smallDash');
+      }
+      // ★ 新增：踩到被封锁的控制点时，给出明确提示
+      if (d >= 1) {
+        const standingCp = (s.small.controlPoints || []).find(cp => cp.x === s.small.myPos.x && cp.y === s.small.myPos.y);
+        if (standingCp) {
+          const blocked = (s.small.blockedCp || []).some(bc =>
+            bc.cp.x === standingCp.x && bc.cp.y === standingCp.y && bc.until > s.small.turnCount
+          );
+          if (blocked && standingCp.owner !== s.small.mySide) {
+            flashMessage('该控制点被封锁，本回合无法占领', 1800);
+            playSound('blockedInvalid');
+          }
+        }
       }
     }
     // ★ 新增：观察期结束
@@ -1186,13 +1226,28 @@ function detectEvents(s) {
     }
   } else {
     if (prevState && prevState.small) {
-      effects = [];
-      // ★ 新增：小棋盘结算胜负（仅当自己参与时）
       const pm = prevState.small;
       if (pm && pm.myScore !== undefined && pm.oppScore !== undefined) {
+        // ★ 1.2 秒结算过渡层
+        const myWon = pm.myScore > pm.oppScore;
+        const isDraw = pm.myScore === pm.oppScore;
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:5000;background:rgba(15,23,42,0.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);pointer-events:none;opacity:0;transition:opacity 0.3s;';
+        overlay.innerHTML = '<div style="font-size:72px;font-weight:900;letter-spacing:4px;color:' + (myWon ? '#fbbf24' : isDraw ? '#94a3b8' : '#ef4444') + ';text-shadow:0 0 40px currentColor;transform:scale(0.6);transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275);">' + (myWon ? '胜 利' : isDraw ? '平 局' : '败 北') + '</div>';
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => {
+          overlay.style.opacity = '1';
+          overlay.firstChild.style.transform = 'scale(1)';
+        });
+        setTimeout(() => { 
+          overlay.style.opacity = '0'; 
+          setTimeout(() => overlay.remove(), 300); 
+        }, 1200);
+        
         if (pm.myScore > pm.oppScore) playSound('smallWin');
         else if (pm.myScore < pm.oppScore) playSound('smallLose');
       }
+      effects = [];
     }
     prevSmallTurnCount = -1;
     prevSmallMyScore = 0;
@@ -1516,9 +1571,10 @@ function renderBigBoard() {
   drawEffectsByLayer('unit', bigCoord, ctx);
   drawEffectsByLayer('ui', bigCoord, ctx);
 
-  if (!myState.collapse.started && myState.collapse.delayRemaining > 0 && myState.collapse.delayRemaining <= 3000) {
-    const sec = Math.ceil(myState.collapse.delayRemaining / 1000);
-    const frac = (myState.collapse.delayRemaining % 1000) / 1000;
+  const collapseRemain = myState.collapse.startAt ? (myState.collapse.startAt - estimateServerNow()) : myState.collapse.delayRemaining;
+  if (!myState.collapse.started && collapseRemain > 0 && collapseRemain <= 3000) {
+    const sec = Math.ceil(collapseRemain / 1000);
+    const frac = (collapseRemain % 1000) / 1000;
     const scale = 1 + (1 - frac) * 0.5; 
     
     ctx.save();
@@ -1992,6 +2048,7 @@ function renderGameOver(me) {
       const cls = ['rank-row'];
       if (r.id === myId) cls.push('me');
       if (r.rank === 1 && r.alive) cls.push('winner');
+      if (r.id === myId && !(r.rank === 1 && r.alive)) cls.push('self-highlight');
       const aliveTag = r.alive ? '' : '<span style="color:#ef4444;font-size:11px;margin-left:6px;">已淘汰</span>';
       const aiTag = r.isAI ? '<span class="ai-tag">AI</span>' : '';
       let rankIcon = r.rank + '.';
@@ -2064,8 +2121,8 @@ function tickCooldown() {
     return; 
   }
   
-  const remaining = Math.max(0, (me.cooldownRemaining || 0) - elapsed);
-  const total = 3000 + ((me.fatigueRemaining && me.fatigueRemaining > 0) ? 1000 : 0);
+  const remaining = Math.max(0, (me.nextActionAt || 0) - estimateServerNow());
+  const total = me.cooldownTotal || 3000;
   const pct = Math.max(0, Math.min(100, (1 - remaining / total) * 100));
   document.getElementById('cooldownBar').style.width = pct + '%';
   const fatigueTag = (me.fatigueRemaining && me.fatigueRemaining > 0) ? ' <span style="color:#dc2626;font-size:11px">疲惫</span>' : '';
@@ -2166,8 +2223,8 @@ document.addEventListener('pointerdown', e => {
   if (fbtn && !fbtn.disabled) {
     e.preventDefault();
     socket.emit('fragment_exchange', { idx: parseInt(fbtn.dataset.fragIdx) }, res => {
-      if (res && res.ok) playSound('exchangeSuccess');   // ★ 改动：与 pickup 区分
-      else if (res && !res.ok) { flashMessage(res.error || '兑换失败'); playSound('exchangeFail'); }   // ★ 改动
+      if (res && res.ok) { playSound('exchangeSuccess'); flashMessage('兑换成功', 1200, 'success'); }
+      else if (res && !res.ok) { flashMessage(res.error || '兑换失败'); playSound('exchangeFail'); }
     });
     return;
   }
@@ -2179,8 +2236,8 @@ document.addEventListener('pointerdown', e => {
     else {
       selectedBlessingId = null;
       socket.emit('choose_blessing', { id }, res => {
-        if (res && res.ok) playSound('blessingConfirm');   // ★ 改动：与 appear 区分
-        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blockedInvalid'); }   // ★ 改动
+        if (res && res.ok) { playSound('blessingConfirm'); flashMessage('祝福已生效', 1200, 'success'); }
+        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blockedInvalid'); }
       });
     }
     return;
@@ -2193,8 +2250,8 @@ document.addEventListener('pointerdown', e => {
     else {
       selectedRelicIdx = null;
       socket.emit('choose_relic', { idx }, res => {
-        if (res && res.ok) playSound('relicConfirm');   // ★ 改动
-        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blockedInvalid'); }   // ★ 改动
+        if (res && res.ok) { playSound('relicConfirm'); flashMessage('信物已带走', 1200, 'success'); }
+        else if (res && !res.ok) { flashMessage(res.error || '选择失败'); playSound('blockedInvalid'); }
       });
     }
     return;

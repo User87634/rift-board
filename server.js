@@ -1,6 +1,6 @@
 /* ============================================================
-   裂隙棋盘 局域网联机服务器 — v10
-   新增：道具丢弃、净化祝福强化、封锁免行动、陷阱双倍、负面传染核心
+   裂隙棋盘 局域网联机服务器 — v10.3
+   更新：小棋盘由单桌单例改为多桌并发（room.smalls: Map）
    ============================================================ */
 
 const express = require('express');
@@ -15,11 +15,11 @@ const axios = require('axios');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-app.use(express.json()); // 用于解析登录请求
+app.use(express.json());
 
 // ================= 环境变量与全局配置 =================
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin123';
-const ACCESS_COOKIE = 'rift_user'; // Cookie 存储账号名
+const ACCESS_COOKIE = 'rift_user';
 
 const ACCOUNTS = {
   '100101': 'Vxt728!q', '100102': 'Hnb394#w', '100103': 'Mjk561@e', '100104': 'Pqz845$r', '100105': 'Fgh219%t',
@@ -35,7 +35,7 @@ const ACCOUNTS = {
   '100151': 'Ert628@z', '100152': 'Rty739#x', '100153': 'Tui841$c', '100154': 'Iop952%v', '100155': 'Oas163&b',
   '100156': 'Pdf274*n', '100157': 'Jkl385!m', '100158': 'Hnm496@q', '100159': 'Gty517#w', '100160': 'Fgh628$e',
   '100161': 'Dsb739%r', '100162': 'Saf841&t', '100163': 'Agh952*y', '100164': 'Ygb163!u', '100165': 'Tgh274@i',
-  '100166': 'Rgf385#o', '100167': 'Edf496$p', '100167': 'Edf496$p', '100168': 'Wsf517%a', '100169': 'Qdv628&s',
+  '100166': 'Rgf385#o', '100167': 'Edf496$p', '100168': 'Wsf517%a', '100169': 'Qdv628&s',
   '100170': 'Zcv739*d', '100171': 'Xbv841!f', '100172': 'Cnv952@g', '100173': 'Vmv163#h', '100174': 'Bmv274$j',
   '100175': 'Ncm385%k', '100176': 'Mcv496&l', '100177': 'Lcw517*z', '100178': 'Pcw628!x', '100179': 'Kcv739@c',
   '100180': 'Ucv841#v', '100181': 'Ycb952$b', '100182': 'Tvb163%n', '100183': 'Qvb274&m', '100184': 'Wbn385*q',
@@ -65,7 +65,7 @@ if (GOOGLE_SERVICE_ACCOUNT_KEY && GOOGLE_SHEET_ID) {
   try {
     let rawKey = GOOGLE_SERVICE_ACCOUNT_KEY.trim().replace(/\r/g, '');
     rawKey = rawKey.replace(/"private_key"\s*:\s*"([\s\S]*?)"/g, (match, p1) => `"private_key": "${p1.replace(/\n/g, '\\n').replace(/\t/g, '')}"`);
-    rawKey = rawKey.replace(/\n/g, ' '); 
+    rawKey = rawKey.replace(/\n/g, ' ');
     const keyJson = JSON.parse(rawKey);
     const auth = new google.auth.GoogleAuth({ credentials: keyJson, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     sheetsClient = google.sheets({ version: 'v4', auth });
@@ -109,7 +109,7 @@ async function recordVisit(type, ip, name, room, ua, account = '') {
   const d = new Date(Date.now() + 8 * 3600 * 1000);
   const timeStr = d.toISOString().replace('T', ' ').substring(0, 19);
   const record = { t: Date.now(), type, ip: masked, location, device, name: name || '-', room: room || '-', account: account || '游客' };
-  
+
   visits.push(record);
   if (visits.length > VISITS_MAX) visits.shift();
 
@@ -212,7 +212,7 @@ async function tick(){
     document.getElementById('stat-games').textContent = totalGames;
     document.getElementById('stat-visits').textContent = totalVisits;
     const arr = Array.from(accMap.entries()).map(([account, data]) => ({ account, ...data })).sort((a,b) => b.games - a.games);
-    document.getElementById('ptb').innerHTML = arr.map(p => 
+    document.getElementById('ptb').innerHTML = arr.map(p =>
       '<tr><td style="font-weight:600;color:#4f46e5">'+esc(p.account)+'</td><td>'+p.connections+' 次</td><td><span style="font-weight:700;color:#d97706">'+p.games+'</span> 次</td></tr>'
     ).join('') || '<tr><td colspan="3" style="color:#94a3b8">暂无玩家数据</td></tr>';
   }catch(e){}
@@ -270,7 +270,7 @@ const CONFIG = {
   FINAL_PHASE_STANDABLE: 4, MAX_LOGS: 50, VIEW: 2, VIEW_BUFF: 3,
   SCAN_RADIUS: 5, SCAN_DURATION: 10000, DECOY_RADIUS: 7, DECOY_DURATION: 5000,
   VISION_BUFF_DURATION: 120000, AI_TICK: 250, DISORIENT_DURATION: 15000,
-  PURIFY_IMMUNE_DURATION: 45000 // 净化祝福免疫时间
+  PURIFY_IMMUNE_DURATION: 45000
 };
 
 const TILE = { NORMAL: 0, OBSTACLE: 1, RESOURCE: 2, TRANSPORT: 3, DANGER: 4, RUIN: 5, RIFT: 6 };
@@ -365,7 +365,7 @@ function createRoom(mode) {
   for (let y = 0; y < CONFIG.SIZE; y++) for (let x = 0; x < CONFIG.SIZE; x++) if (tiles[y][x] === TILE.NORMAL && Math.random() < CONFIG.RESOURCE_RATE) tiles[y][x] = TILE.RESOURCE;
   for (let y = 0; y < CONFIG.SIZE; y++) for (let x = 0; x < CONFIG.SIZE; x++) if (tiles[y][x] === TILE.NORMAL && Math.random() < CONFIG.TRANSPORT_RATE) tiles[y][x] = TILE.TRANSPORT;
   const room = {
-    code, mode: mode === 'FOG' ? 'FOG' : 'CLASSIC', players: new Map(), tiles, roadblocks: [], rifts: [], small: null, logs: [],
+    code, mode: mode === 'FOG' ? 'FOG' : 'CLASSIC', players: new Map(), tiles, roadblocks: [], rifts: [], smalls: new Map(), logs: [],
     locked: false, playerCounter: 0, aiCounter: 0, peakPlayers: 0, createdAt: Date.now(), lastResourceSupply: Date.now(),
     gameOver: false, winnerId: null, finalPhaseTriggered: false, pendingFinalPhase: false, rankings: null, aiFilled: false,
     collapse: { started: false, done: false, ring: 0, cells: [], warnCell: null, warnUntil: 0, nextAt: 0 }
@@ -390,6 +390,20 @@ function isValidRoadblockTarget(room, x, y) {
   for (const p of room.players.values()) if (p.alive && p.x === x && p.y === y) return false;
   return true;
 }
+
+/* ============================================================
+   小棋盘多桌辅助函数
+   ============================================================ */
+function getPlayerSmall(room, playerId) {
+  for (const sm of room.smalls.values()) {
+    if (sm.aId === playerId || sm.bId === playerId) return sm;
+  }
+  return null;
+}
+function isInAnySmall(room, playerId) {
+  return getPlayerSmall(room, playerId) !== null;
+}
+
 function findSpawn(room) {
   const existing = Array.from(room.players.values());
   for (let t = 0; t < 500; t++) {
@@ -568,7 +582,7 @@ function startSmallBoard(room, a, b, rift) {
   if (b.riftKeyPendingItem) { b.riftKeyPendingItem = false; sm.bItems.push(pick(SMALL_ITEM_TYPES)); }
   if (a.relic) { sm.aItems.push(a.relic); a.relic = null; }
   if (b.relic) { sm.bItems.push(b.relic); b.relic = null; }
-  room.small = sm;
+  room.smalls.set(rift.id, sm);
   addLog(room, a.name + ' 与 ' + b.name + ' 开始小棋盘对决');
 }
 function smallSamePos(a, b) { return a && b && a.x === b.x && a.y === b.y; }
@@ -592,15 +606,14 @@ function useSmallBlock(sm, side) {
   const itemsKey = side === 'a' ? 'aItems' : 'bItems';
   const idx = sm[itemsKey].indexOf('block');
   if (idx === -1) return false;
-  
-  // 寻找未被占领的点
+
   const validCps = sm.controlPoints.filter(cp => {
     if (cp.owner !== 'neutral') return false;
     if (sm.blockedCp.some(bc => smallSamePos(bc.cp, cp))) return false;
     if (smallSamePos(cp, sm.aPos) || smallSamePos(cp, sm.bPos)) return false;
     return true;
   });
-  
+
   if (validCps.length === 0) return false;
   const target = pick(validCps);
   sm.blockedCp.push({ cp: target, owner: side, until: sm.turnCount + 2 });
@@ -613,7 +626,7 @@ function applySmallItem(sm, side, act) {
   if (typeof idx !== 'number' || idx < 0 || idx >= sm[itemsKey].length) return;
   const item = sm[itemsKey][idx], selfPosKey = side === 'a' ? 'aPos' : 'bPos', oppPosKey = side === 'a' ? 'bPos' : 'aPos';
   const self = sm[selfPosKey], opp = sm[oppPosKey], inBoard = (p) => p && p.x >= 0 && p.x <= 6 && p.y >= 0 && p.y <= 6;
-  
+
   if (item === 'push') {
     let refCp = null, minD = Infinity;
     for (const cp of sm.controlPoints) {
@@ -640,11 +653,10 @@ function applySmallItem(sm, side, act) {
       const tx = cp.x + dx, ty = cp.y + dy;
       if (tx < 0 || tx > 6 || ty < 0 || ty > 6) continue;
       if (sm.blockades.some(bd => bd.x === tx && bd.y === ty)) continue;
-      if (smallSamePos(sm.aPos, {x:tx, y:ty}) || smallSamePos(sm.bPos, {x:tx, y:ty})) continue; // 不能放脚下
+      if (smallSamePos(sm.aPos, {x:tx, y:ty}) || smallSamePos(sm.bPos, {x:tx, y:ty})) continue;
       if (sm.aTraps.some(t => smallSamePos(t, {x:tx, y:ty})) || sm.bTraps.some(t => smallSamePos(t, {x:tx, y:ty}))) continue;
       candidates.push({ x: tx, y: ty });
     }
-    // 放两个
     const trapsKey = side === 'a' ? 'aTraps' : 'bTraps';
     if (candidates.length > 0) { const t1 = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0]; sm[trapsKey].push(t1); }
     if (candidates.length > 0) { const t2 = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0]; sm[trapsKey].push(t2); }
@@ -652,22 +664,23 @@ function applySmallItem(sm, side, act) {
   }
 }
 
-function resolveSmallTurn(room) {
-  const sm = room.small, aP = room.players.get(sm.aId), bP = room.players.get(sm.bId);
+function resolveSmallTurn(room, sm) {
+  const aP = room.players.get(sm.aId), bP = room.players.get(sm.bId);
   const oldA = sm.aScore, oldB = sm.bScore, a = sm.aInput || { type: 'hold' }, b = sm.bInput || { type: 'hold' };
-  
+
   if (a.type === 'item') applySmallItem(sm, 'a', a);
   if (b.type === 'item') applySmallItem(sm, 'b', b);
-  
+
   const aCanMove = !sm.aStunned && !sm.aDashPenalty && !sm.aHoldPenalty, bCanMove = !sm.bStunned && !sm.bDashPenalty && !sm.bHoldPenalty;
   if ((a.type === 'move' || a.type === 'dash') && aCanMove) applySmallMove(sm, 'a', a);
   if ((b.type === 'move' || b.type === 'dash') && bCanMove) applySmallMove(sm, 'b', b);
-  
-  // 陷阱触发判定
+
   if (sm.aTraps.some(t => smallSamePos(sm.bPos, t))) { sm.bStunnedTurns = 2; sm.aTraps = sm.aTraps.filter(t => !smallSamePos(sm.bPos, t)); }
   if (sm.bTraps.some(t => smallSamePos(sm.aPos, t))) { sm.aStunnedTurns = 2; sm.bTraps = sm.bTraps.filter(t => !smallSamePos(sm.aPos, t)); }
 
   for (const cp of sm.controlPoints) {
+    const blocked = sm.blockedCp.find(bc => smallSamePos(bc.cp, cp) && bc.until > sm.turnCount);
+    if (blocked) continue;  // ★ 封锁中：不改变归属，谁站上去都没用
     if (smallSamePos(sm.aPos, cp)) cp.owner = 'a'; else if (smallSamePos(sm.bPos, cp)) cp.owner = 'b';
   }
   for (const cp of sm.controlPoints) {
@@ -677,11 +690,11 @@ function resolveSmallTurn(room) {
   if (b.type === 'hold' && !sm.bStunned && !sm.bDashPenalty && sm.controlPoints.find(cp => smallSamePos(sm.bPos, cp) && cp.owner === 'b')) { sm.bScore += 1; sm.bHoldPenaltyNext = true; }
   if (a.type === 'dash' && aCanMove) sm.aDashPenaltyNext = true;
   if (b.type === 'dash' && bCanMove) sm.bDashPenaltyNext = true;
-  
+
   if (sm.aScore > oldA) { aP.lastScoreAt = Date.now(); sm.aLastScoreAt = Date.now(); }
   if (sm.bScore > oldB) { bP.lastScoreAt = Date.now(); sm.bLastScoreAt = Date.now(); }
   sm.aInput = null; sm.bInput = null;
-  
+
   if (sm.turnCount % 2 === 1) {
     const empty = [];
     for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) {
@@ -691,16 +704,15 @@ function resolveSmallTurn(room) {
     }
     if (empty.length > 0) { const c = pick(empty); sm.items.push({ x: c.x, y: c.y, type: pick(SMALL_ITEM_TYPES) }); }
   }
-  
-  if (sm.aScore >= CONFIG.SMALL_SCORE_WIN || sm.bScore >= CONFIG.SMALL_SCORE_WIN || Date.now() >= sm.endsAt) { endSmallBoard(room); return; }
-  
+
+  if (sm.aScore >= CONFIG.SMALL_SCORE_WIN || sm.bScore >= CONFIG.SMALL_SCORE_WIN || Date.now() >= sm.endsAt) { endSmallBoard(room, sm); return; }
+
   sm.blockades = sm.blockades.filter(bd => bd.until > sm.turnCount);
   sm.blockedCp = sm.blockedCp.filter(bc => bc.until > sm.turnCount);
-  
-  // 结算定身回合数
+
   if (sm.aStunnedTurns > 0) { sm.aStunned = true; sm.aStunnedTurns--; }
   else sm.aStunned = false;
-  
+
   if (sm.bStunnedTurns > 0) { sm.bStunned = true; sm.bStunnedTurns--; }
   else sm.bStunned = false;
 
@@ -712,16 +724,53 @@ function resolveSmallTurn(room) {
 }
 
 function smallTick(room, now) {
-  const sm = room.small;
-  if (!sm) return false;
-  if (now >= sm.endsAt) { endSmallBoard(room); return true; }
-  if (now >= sm.nextTurnAt) {
-    const aP = room.players.get(sm.aId), bP = room.players.get(sm.bId);
-    if (aP && aP.isAI && !sm.aInput) sm.aInput = smallAI(sm, 'a');
-    if (bP && bP.isAI && !sm.bInput) sm.bInput = smallAI(sm, 'b');
-    resolveSmallTurn(room); return true;
+  let changed = false;
+  for (const sm of Array.from(room.smalls.values())) {
+    if (now >= sm.endsAt) { endSmallBoard(room, sm); changed = true; continue; }
+    if (now >= sm.nextTurnAt) {
+      const aP = room.players.get(sm.aId), bP = room.players.get(sm.bId);
+      if (!aP || !bP) { endSmallBoard(room, sm); changed = true; continue; }
+      try {
+        if (aP.isAI && !sm.aInput) sm.aInput = smallAI(sm, 'a');
+        if (bP.isAI && !sm.bInput) sm.bInput = smallAI(sm, 'b');
+        resolveSmallTurn(room, sm);
+        changed = true;
+      } catch (err) {
+        console.error('[小棋盘严重错误，强制终止]', err);
+        addLog(room, '小棋盘运行异常，强制终止并释放裂隙');
+        endSmallBoard(room, sm);
+        changed = true;
+      }
+    }
   }
-  return false;
+  return changed;
+}
+function aiTrySmallBlock(sm, side) {
+  const itemsKey = side === 'a' ? 'aItems' : 'bItems';
+  const blockIdx = sm[itemsKey].indexOf('block');
+  if (blockIdx === -1) return false;
+
+  const oppPos = side === 'a' ? sm.bPos : sm.aPos;
+  const selfPos = side === 'a' ? sm.aPos : sm.bPos;
+
+  let bestCp = null, bestOppD = Infinity, bestSelfD = Infinity;
+  for (const cp of sm.controlPoints) {
+    if (cp.owner !== 'neutral') continue;
+    if (sm.blockedCp.some(bc => smallSamePos(bc.cp, cp) && bc.until > sm.turnCount)) continue;
+    if (smallSamePos(cp, sm.aPos) || smallSamePos(cp, sm.bPos)) continue;
+    const oppD = dist(cp, oppPos), selfD = dist(cp, selfPos);
+    if (oppD < bestOppD || (oppD === bestOppD && selfD > bestSelfD)) {
+      bestOppD = oppD; bestSelfD = selfD; bestCp = cp;
+    }
+  }
+
+  if (!bestCp) return false;
+  if (bestOppD >= bestSelfD) return false;
+  if (bestOppD > 2) return false;
+
+  sm.blockedCp.push({ cp: bestCp, owner: side, until: sm.turnCount + 2 });
+  sm[itemsKey].splice(blockIdx, 1);
+  return true;
 }
 function smallAI(sm, side) {
   const selfKey = side === 'a' ? 'aPos' : 'bPos', oppKey = side === 'a' ? 'bPos' : 'aPos';
@@ -729,22 +778,24 @@ function smallAI(sm, side) {
   const self = sm[selfKey], opp = sm[oppKey], items = sm[selfItemsKey];
   const canMove = !(sm[side === 'a' ? 'aStunned' : 'bStunned'] || sm[side === 'a' ? 'aDashPenalty' : 'bDashPenalty'] || sm[side === 'a' ? 'aHoldPenalty' : 'bHoldPenalty']);
   const scoreDiff = sm[selfScoreKey] - sm[oppScoreKey];
-  
+
+  aiTrySmallBlock(sm, side);   // ★ block 不占行动，先尝试用它，然后继续正常决策
+
   if (!canMove) {
     const stealIdx = items.indexOf('steal'); if (stealIdx >= 0 && sm[oppScoreKey] > 0) return { type: 'item', itemIdx: stealIdx };
     const trapIdx = items.indexOf('trap'); if (trapIdx >= 0) return { type: 'item', itemIdx: trapIdx };
     return { type: 'idle' };
   }
-  
+
   const onOwnCp = sm.controlPoints.find(cp => cp.owner === side && smallSamePos(cp, self));
   const isWinning = scoreDiff >= 3 || (sm[selfScoreKey] >= 8 && scoreDiff > 0);
   const isLosing = scoreDiff <= -2;
-  
+
   if (isWinning && onOwnCp && !sm[side === 'a' ? 'aHoldPenalty' : 'bHoldPenalty'] && Math.random() < 0.8) return { type: 'hold' };
-  
+
   const stealIdx = items.indexOf('steal');
   if (stealIdx >= 0 && sm[oppScoreKey] > 0) { if (isLosing || Math.random() < 0.3) return { type: 'item', itemIdx: stealIdx }; }
-  
+
   const targetCp = (() => {
     let best = null, bestD = 99;
     for (const cp of sm.controlPoints) {
@@ -755,16 +806,16 @@ function smallAI(sm, side) {
     }
     return best;
   })();
-  
+
   const target = targetCp || (isWinning ? self : opp);
-  
+
   if (targetCp && smallSamePos(targetCp, opp)) {
     const pushIdx = items.indexOf('push'); if (pushIdx >= 0 && Math.random() < 0.5) return { type: 'item', itemIdx: pushIdx };
   }
-  
+
   const dx = target.x - self.x, dy = target.y - self.y, options = [];
   const order = Math.abs(dx) >= Math.abs(dy) ? [['x', Math.sign(dx)], ['y', Math.sign(dy)]] : [['y', Math.sign(dy)], ['x', Math.sign(dx)]];
-  
+
   for (const [axis, sign] of order) {
     if (sign === 0) continue;
     const step = { x: self.x + (axis === 'x' ? sign : 0), y: self.y + (axis === 'y' ? sign : 0) };
@@ -773,20 +824,20 @@ function smallAI(sm, side) {
     const step2 = { x: step.x + (axis === 'x' ? sign : 0), y: step.y + (axis === 'y' ? sign : 0) };
     if (step2.x >= 0 && step2.x <= 6 && step2.y >= 0 && step2.y <= 6 && !smallSamePos(step2, opp) && !sm.blockades.some(bd => bd.x === step2.x && bd.y === step2.y) && (step2.x === target.x && step2.y === target.y || dist(step2, target) < dist(step, target))) options.push(step2);
   }
-  
+
   const dashPen = sm[side === 'a' ? 'aDashPenalty' : 'bDashPenalty'];
   if (!dashPen && dist(self, target) === 2 && options.some(o => o.x === target.x && o.y === target.y) && (target.x === self.x || target.y === self.y)) return { type: 'dash', target };
-  
+
   const trapIdx = items.indexOf('trap'); if (trapIdx >= 0 && Math.random() < 0.3) return { type: 'item', itemIdx: trapIdx };
   const swapIdx = items.indexOf('swap'); if (swapIdx >= 0 && dist(self, target) >= 3 && Math.random() < 0.2) return { type: 'item', itemIdx: swapIdx };
-  
+
   if (options.length > 0) return { type: 'move', target: options[0] };
   if (onOwnCp) return { type: 'hold' };
   return { type: 'idle' };
 }
 
-function endSmallBoard(room) {
-  const sm = room.small; if (!sm) return;
+function endSmallBoard(room, sm) {
+  if (!sm) return;
   const aP = room.players.get(sm.aId), bP = room.players.get(sm.bId);
   let winP, loseP, finalDiff;
   if (sm.aScore > sm.bScore) { winP = aP; loseP = bP; finalDiff = sm.aScore - sm.bScore; }
@@ -826,7 +877,7 @@ function endSmallBoard(room) {
     applyPunishment(room, loseP, finalDiff, winP);
   }
   addLog(room, '对决结束：' + (winP ? winP.name : '?') + ' 胜出，分差 ' + finalDiff);
-  room.small = null;
+  room.smalls.delete(sm.riftId);
   if (room.pendingFinalPhase && !room.gameOver) checkFinalPhase(room);
 }
 
@@ -834,10 +885,9 @@ function applyPunishment(room, loser, diff, winner) {
   const now = Date.now();
   let type = diff <= 2 ? '小败' : diff <= 4 ? '中败' : '大败', fragGain = 1;
   const lowHp = loser.hp <= 1, hasShield = (loser.shields || 0) > 0;
-  
-  // 净化免疫拦截
+
   const isImmune = loser.immuneUntil && loser.immuneUntil > now;
-  
+
   if (type === '小败') { if (!isImmune) loser.fatigueUntil = now + 10000; fragGain = 1; }
   else if (type === '中败') {
     if (!isImmune) loser.fatigueUntil = now + (lowHp ? 20000 : 15000);
@@ -859,9 +909,9 @@ function applyBlessing(room, player, blessingId) {
   else if (blessingId === 'shield') player.shields = (player.shields || 0) + 2;
   else if (blessingId === 'harvest') player.harvestBuff = true;
   else if (blessingId === 'rift') player.riftRushBuff = true;
-  else if (blessingId === 'purify') { 
-    player.fatigueUntil = 0; player.disoriented = false; player.disorientedUntil = 0; player.nextActionAt = now; 
-    player.immuneUntil = now + CONFIG.PURIFY_IMMUNE_DURATION; // 45秒免疫
+  else if (blessingId === 'purify') {
+    player.fatigueUntil = 0; player.disoriented = false; player.disorientedUntil = 0; player.nextActionAt = now;
+    player.immuneUntil = now + CONFIG.PURIFY_IMMUNE_DURATION;
   }
   else if (blessingId === 'dash') { let added = 0; while (added < 2 && player.items.length < CONFIG.ITEM_CAP) { player.items.push('item_0'); added++; } }
   else if (blessingId === 'heal') { player.hp = Math.min(CONFIG.HP, player.hp + 1); player.shields = (player.shields || 0) + 1; }
@@ -925,7 +975,7 @@ function damagePlayer(room, player, amount, reason) {
 function killPlayer(p, reason, room) { p.alive = false; p.hp = 0; p.stats.killReason = reason; p.stats.deadAt = Date.now(); if (room) addLog(room, p.name + ' 被淘汰（' + reason + '）'); }
 
 function tryDisorientAutoMove(room, player, now) {
-  if (!player.alive || !player.disoriented || room.small && (room.small.aId === player.id || room.small.bId === player.id) || player.waitingRiftId || now < player.nextActionAt) return false;
+  if (!player.alive || !player.disoriented || isInAnySmall(room, player.id) || player.waitingRiftId || now < player.nextActionAt) return false;
   player.disoriented = false; player.disorientedUntil = 0;
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => isWalkable(room, player.x + dx, player.y + dy, player.id));
   if (dirs.length === 0) { player.nextActionAt = now + CONFIG.ACTION_CD; addLog(room, player.name + ' 失控但四周不可走'); return true; }
@@ -943,7 +993,7 @@ function checkFinalPhase(room) {
   for (let y = 0; y < CONFIG.SIZE; y++) for (let x = 0; x < CONFIG.SIZE; x++) { const t = room.tiles[y][x]; if (t === TILE.NORMAL || t === TILE.RESOURCE || t === TILE.RIFT || t === TILE.TRANSPORT) standable++; }
   if (standable > CONFIG.FINAL_PHASE_STANDABLE) return false;
   room.collapse.done = true;
-  if (room.small) { room.pendingFinalPhase = true; return false; }
+  if (room.smalls.size > 0) { room.pendingFinalPhase = true; return false; }
   room.finalPhaseTriggered = true; room.pendingFinalPhase = false;
   const winner = alive.slice().sort((a, b) => b.hp !== a.hp ? b.hp - a.hp : (b.fragments || 0) !== (a.fragments || 0) ? (b.fragments || 0) - (a.fragments || 0) : b.items.length !== a.items.length ? b.items.length - a.items.length : (b.lastScoreAt || 0) - (a.lastScoreAt || 0))[0];
   room.gameOver = true; room.winnerId = winner ? winner.id : null; room.rankings = computeRankings(room);
@@ -962,7 +1012,7 @@ function computeRankings(room) {
   return all.map((p, i) => ({
     rank: i + 1, id: p.id, name: p.name, color: p.color, isAI: !!p.isAI, alive: p.alive, hp: p.hp, fragments: p.fragments || 0, items: p.items.length,
     smallWins: p.stats.smallWins || 0, smallLosses: p.stats.smallLosses || 0, damageTaken: p.stats.damageTaken || 0, pickups: p.stats.pickups || 0,
-    itemsUsed: p.stats.itemsUsed || 0, riftEnters: p.stats.riftEnters || 0, killReason: p.stats.killReason || null, 
+    itemsUsed: p.stats.itemsUsed || 0, riftEnters: p.stats.riftEnters || 0, killReason: p.stats.killReason || null,
     aliveTime: Math.max(0, Math.round(((p.alive ? now : (p.stats.deadAt || now)) - (p.joinAt || room.createdAt)) / 1000))
   }));
 }
@@ -994,6 +1044,32 @@ function fillWithAI(room) {
   }
   addLog(room, 'AI 补位完成，共 ' + count + ' 个 AI'); broadcastRoomList();
 }
+function aiTryNegativeContagion(room, ai, now) {
+  if (!ai.items.includes('item_7')) return false;
+  const fRemain = ai.fatigueUntil && ai.fatigueUntil > now ? ai.fatigueUntil - now : 0;
+  const dRemain = ai.disoriented && ai.disorientedUntil > now ? ai.disorientedUntil - now : 0;
+  if (fRemain <= 0 && dRemain <= 0) return false;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const targets = [];
+  for (const [dx, dy] of dirs) {
+    const tx = ai.x + dx, ty = ai.y + dy;
+    for (const other of room.players.values()) {
+      if (other !== ai && other.alive && other.x === tx && other.y === ty) {
+        if (other.immuneUntil && other.immuneUntil > now) continue;
+        targets.push(other);
+      }
+    }
+  }
+  if (targets.length === 0) return false;
+  ai.items.splice(ai.items.indexOf('item_7'), 1);
+  ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+  for (const other of targets) {
+    if (fRemain > 0) other.fatigueUntil = now + fRemain;
+    if (dRemain > 0) { other.disoriented = true; other.disorientedUntil = now + dRemain; }
+  }
+  addLog(room, ai.name + ' 使用负面传染核心，感染 ' + targets.length + ' 名玩家');
+  return true;
+}
 function aiTryUseItem(room, ai, now) {
   if (ai.hp <= 1 && ai.items.includes('item_6')) { ai.items.splice(ai.items.indexOf('item_6'), 1); ai.hp = Math.min(CONFIG.HP, ai.hp + 1); ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1; ai.nextActionAt = now + CONFIG.ACTION_CD; return true; }
   if (ai.hp <= 2 && (ai.shields || 0) <= 0 && ai.items.includes('item_3')) { ai.items.splice(ai.items.indexOf('item_3'), 1); ai.shields = (ai.shields || 0) + 1; ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1; ai.nextActionAt = now + CONFIG.ACTION_CD; return true; }
@@ -1005,7 +1081,7 @@ function aiTryUseItem(room, ai, now) {
       let count = 0;
       for (const other of room.players.values()) {
         if (other !== ai && other.alive && Math.abs(other.x - ai.x) <= 1 && Math.abs(other.y - ai.y) <= 1) {
-          if (other.immuneUntil && other.immuneUntil > now) continue; // 免疫判断
+          if (other.immuneUntil && other.immuneUntil > now) continue;
           other.disoriented = true; other.disorientedUntil = now + CONFIG.DISORIENT_DURATION; count++;
         }
       }
@@ -1061,10 +1137,23 @@ function aiTryUseItem(room, ai, now) {
       }
     }
   }
+  if (ai.items.includes('item_5') && ai.hp > 1 && now - ai.lastRiftAt > 10000) {
+    const nearRift = room.rifts.find(r => (r.state === 'OPEN' || r.state === 'WAITING') && dist(ai, r) <= 6);
+    if (nearRift) {
+      ai.items.splice(ai.items.indexOf('item_5'), 1);
+      ai.riftKeyBuff = true;
+      ai.stats.itemsUsed = (ai.stats.itemsUsed || 0) + 1;
+      ai.nextActionAt = now + CONFIG.ACTION_CD;
+      addLog(room, ai.name + ' 使用裂隙钥匙');
+      return true;
+    }
+  }
   return false;
 }
 function aiBigBoardDecision(room, ai, now) {
-  if (ai.waitingRiftId || (room.small && (room.small.aId === ai.id || room.small.bId === ai.id)) || !ai.alive || now < ai.nextActionAt || ai.disoriented) return;
+  if (ai.waitingRiftId || isInAnySmall(room, ai.id) || !ai.alive) return;
+  aiTryNegativeContagion(room, ai, now);   // ★ item_7 不占行动，冷却未到也能用
+  if (now < ai.nextActionAt || ai.disoriented) return;
   if (Math.random() < 0.3) ai.riftHints = ai.riftHints.filter(h => !h.fake);
   if (aiTryUseItem(room, ai, now)) return;
   computeVisibility(room, ai);
@@ -1076,7 +1165,7 @@ function aiBigBoardDecision(room, ai, now) {
   if (ai.hp > 1 && now - ai.lastRiftAt > 10000) {
     for (const r of room.rifts) {
       if (r.state === 'OPEN' || r.state === 'WAITING') {
-        const d = dist(ai, r), weightDist = r.state === 'WAITING' ? d - 2 : d; 
+        const d = dist(ai, r), weightDist = r.state === 'WAITING' ? d - 2 : d;
         if (weightDist < minRiftDist) { minRiftDist = weightDist; targetRift = r; }
       }
     }
@@ -1094,7 +1183,7 @@ function aiBigBoardDecision(room, ai, now) {
     if (t === TILE.RIFT && ai.hp > 1 && now - ai.lastRiftAt > 10000) {
       const r = room.rifts.find(rr => rr.x === nx && rr.y === ny);
       if (r && (r.state === 'OPEN' || r.state === 'WAITING')) {
-        if (r.state === 'WAITING') score += 60; 
+        if (r.state === 'WAITING') score += 60;
         else score += (ai.items.length >= 2 ? 30 : 15);
       }
     }
@@ -1138,12 +1227,14 @@ function getStateFor(room, playerId) {
   const playersForMe = [];
   for (const p of room.players.values()) {
     const base = { id: p.id, name: p.name, color: p.color, alive: p.alive, isMe: p.id === playerId, isAI: !!p.isAI, winStreak: p.winStreak || 0, lossStreak: p.lossStreak || 0, hasRelic: !!p.relic, hasBlessing: !!p.pendingBlessing, hasPendingRelic: !!p.pendingRelic };
-    const pInSmall = room.small && (room.small.aId === p.id || room.small.bId === p.id);
+    const pInSmall = isInAnySmall(room, p.id);
     if (!me || p.id === playerId || (me.visible && me.visible.has(p.x + ',' + p.y))) {
       Object.assign(base, {
         x: p.x, y: p.y, hp: p.hp, shields: p.shields || 0, cooldownRemaining: Math.max(0, p.nextActionAt - now), waitingRiftId: p.waitingRiftId,
         riftWaitRemaining: p.waitingRiftId ? Math.max(0, p.nextActionAt - now) : 0, fatigueRemaining: p.fatigueUntil ? Math.max(0, p.fatigueUntil - now) : 0,
-        disoriented: p.disoriented && p.disorientedUntil > now ? true : false, hidden: false, isInSmall: !!pInSmall
+        disoriented: p.disoriented && p.disorientedUntil > now ? true : false, hidden: false, isInSmall: !!pInSmall,
+        nextActionAt: p.nextActionAt,
+        cooldownTotal: CONFIG.ACTION_CD + ((p.fatigueUntil && p.fatigueUntil > now) ? CONFIG.FATIGUE_EXTRA : 0)
       });
     } else base.hidden = true;
     playersForMe.push(base);
@@ -1182,21 +1273,22 @@ function getStateFor(room, playerId) {
     collapse: {
       started: room.collapse.started, done: room.collapse.done, ring: room.collapse.ring, totalRings: Math.floor(CONFIG.SIZE / 2),
       cellsLeft: room.collapse.cells.length, warnCell: room.collapse.warnCell, warnRemaining: room.collapse.warnCell ? Math.max(0, room.collapse.warnUntil - now) : 0,
-      delayRemaining: !room.collapse.started ? Math.max(0, CONFIG.COLLAPSE_DELAY - (now - room.createdAt)) : 0
+      delayRemaining: !room.collapse.started ? Math.max(0, CONFIG.COLLAPSE_DELAY - (now - room.createdAt)) : 0,
+      startAt: room.createdAt + CONFIG.COLLAPSE_DELAY
     },
     locked: room.locked, logs: room.logs.slice(-30), finalPhaseTriggered: room.finalPhaseTriggered, gameOver: room.gameOver,
     winnerId: room.winnerId, rankings: room.gameOver ? (room.rankings || computeRankings(room)) : null
   };
-  const sm = room.small;
-  if (sm && (sm.aId === playerId || sm.bId === playerId)) {
+  const sm = getPlayerSmall(room, playerId);
+  if (sm) {
     const mySide = sm.aId === playerId ? 'a' : 'b', oppId = mySide === 'a' ? sm.bId : sm.aId, oppP = room.players.get(oppId);
     base.small = {
       mySide, myPos: mySide === 'a' ? sm.aPos : sm.bPos, oppPos: mySide === 'a' ? sm.bPos : sm.aPos, oppName: oppP ? oppP.name : '?',
       oppColor: oppP ? oppP.color : '#888', oppIsAI: oppP ? !!oppP.isAI : false, myScore: mySide === 'a' ? sm.aScore : sm.bScore, oppScore: mySide === 'a' ? sm.bScore : sm.aScore,
-      controlPoints: sm.controlPoints, items: sm.items, myItems: mySide === 'a' ? sm.aItems : sm.bItems, 
+      controlPoints: sm.controlPoints, items: sm.items, myItems: mySide === 'a' ? sm.aItems : sm.bItems,
       myTraps: mySide === 'a' ? sm.aTraps : sm.bTraps,
-      blockades: sm.blockades, blockedCp: sm.blockedCp, 
-      myStunned: mySide === 'a' ? sm.aStunned : sm.bStunned, 
+      blockades: sm.blockades, blockedCp: sm.blockedCp,
+      myStunned: mySide === 'a' ? sm.aStunned : sm.bStunned,
       myStunnedTurns: mySide === 'a' ? sm.aStunnedTurns : sm.bStunnedTurns,
       myDashPenalty: mySide === 'a' ? sm.aDashPenalty : sm.bDashPenalty,
       myHoldPenalty: mySide === 'a' ? sm.aHoldPenalty : sm.bHoldPenalty, myInput: mySide === 'a' ? sm.aInput : sm.bInput, turnCount: sm.turnCount,
@@ -1258,6 +1350,7 @@ io.on('connection', socket => {
   socket.emit('rooms_list', getRoomList());
 
   socket.on('list_rooms', (data, cb) => { if (cb) cb(getRoomList()); else socket.emit('rooms_list', getRoomList()); });
+  socket.on('ping_latency', (cb) => { if (cb) cb(); });
 
   socket.on('create_room', (data, cb) => {
     const room = createRoom(data && data.mode === 'FOG' ? 'FOG' : 'CLASSIC');
@@ -1290,7 +1383,7 @@ io.on('connection', socket => {
     const r = getMyPlayer(socket);
     if (!r) return cb && cb({ ok: false, error: '未加入房间' });
     const { room, player } = r;
-    if (room.gameOver || !player.alive || player.waitingRiftId || room.small && (room.small.aId === player.id || room.small.bId === player.id)) return cb && cb({ ok: false, error: '当前不可移动' });
+    if (room.gameOver || !player.alive || player.waitingRiftId || isInAnySmall(room, player.id)) return cb && cb({ ok: false, error: '当前不可移动' });
 
     const now = Date.now();
     if (now < player.nextActionAt) return cb && cb({ ok: false, error: '冷却中' });
@@ -1318,7 +1411,7 @@ io.on('connection', socket => {
     const r = getMyPlayer(socket);
     if (!r) return cb && cb({ ok: false, error: '未加入房间' });
     const { room, player } = r;
-    if (room.gameOver || !player.alive || room.small && (room.small.aId === player.id || room.small.bId === player.id)) return cb && cb({ ok: false, error: '当前不可使用' });
+    if (room.gameOver || !player.alive || isInAnySmall(room, player.id)) return cb && cb({ ok: false, error: '当前不可使用' });
 
     const itemIdx = data && data.itemIdx;
     if (typeof itemIdx !== 'number' || itemIdx < 0 || itemIdx >= player.items.length) return cb && cb({ ok: false, error: '无效道具' });
@@ -1354,11 +1447,10 @@ io.on('connection', socket => {
       player.hp = Math.min(CONFIG.HP, player.hp + 1); player.items.splice(itemIdx, 1); bumpUse(); player.nextActionAt = now + CONFIG.ACTION_CD; broadcastState(room); return cb && cb({ ok: true });
     }
     if (itemId === 'item_7') {
-      // 负面状态传染核心
       const fRemain = player.fatigueUntil && player.fatigueUntil > now ? player.fatigueUntil - now : 0;
       const dRemain = player.disoriented && player.disorientedUntil > now ? player.disorientedUntil - now : 0;
       if (fRemain <= 0 && dRemain <= 0) return cb && cb({ ok: false, error: '你当前没有可传染的负面状态' });
-      
+
       player.items.splice(itemIdx, 1); bumpUse();
       let count = 0;
       const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -1392,10 +1484,11 @@ io.on('connection', socket => {
   socket.on('small_action', (data, cb) => {
     const r = getMyPlayer(socket);
     if (!r) return cb && cb({ ok: false, error: '未加入' });
-    const { room, player } = r, sm = room.small;
-    if (!sm || sm.aId !== player.id && sm.bId !== player.id) return cb && cb({ ok: false, error: '不在对决中' });
+    const { room, player } = r;
+    const sm = getPlayerSmall(room, player.id);
+    if (!sm) return cb && cb({ ok: false, error: '不在对决中' });
     if (Date.now() < sm.nextTurnAt && sm.turnCount === 0) return cb && cb({ ok: false, error: '观察期' });
-    
+
     const side = sm.aId === player.id ? 'a' : 'b';
     if (data && data.type === 'use_block') {
       if (useSmallBlock(sm, side)) {
@@ -1454,12 +1547,13 @@ io.on('connection', socket => {
     const r = getMyPlayer(socket);
     if (!r) return;
     const { room, player } = r;
-    if (room.small && (room.small.aId === player.id || room.small.bId === player.id)) {
-      const sm = room.small, oppId = sm.aId === player.id ? sm.bId : sm.aId, opp = room.players.get(oppId);
+    const mySm = getPlayerSmall(room, player.id);
+    if (mySm) {
+      const sm = mySm, oppId = sm.aId === player.id ? sm.bId : sm.aId, opp = room.players.get(oppId);
       if (opp) { opp.hp = Math.min(CONFIG.HP, opp.hp + 1); const safe = findSafeCell(room); if (safe) { opp.x = safe.x; opp.y = safe.y; } opp.nextActionAt = Date.now() + 5000; }
       const rift = room.rifts.find(r => r.id === sm.riftId);
       if (rift) { rift.state = 'COOLDOWN'; rift.cooldownUntil = Date.now() + CONFIG.RIFT_COOLDOWN; }
-      room.small = null; addLog(room, player.name + ' 在小棋盘中断线，对手获胜');
+      room.smalls.delete(sm.riftId); addLog(room, player.name + ' 在小棋盘中断线，对手获胜');
     }
     addLog(room, player.name + ' 离开房间');
     room.players.delete(player.id);
@@ -1470,7 +1564,7 @@ io.on('connection', socket => {
   });
 });
 
-/* ---------- 主循环与 AI 循环 (保留原样) ---------- */
+/* ---------- 主循环与 AI 循环 ---------- */
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
@@ -1479,17 +1573,31 @@ setInterval(() => {
     room.roadblocks = room.roadblocks.filter(r => r.until > now);
     if (room.roadblocks.length !== rbBefore) changed = true;
     if (riftTick(room, now)) changed = true;
+
+    // ★ 裂隙 BUSY 状态超时保护（多桌版：按 rift.id 查对应小棋盘）
+    for (const r of room.rifts) {
+      if (r.state !== 'BUSY') continue;
+      const sm = room.smalls.get(r.id);
+      if (!sm) {
+        r.state = 'COOLDOWN'; r.cooldownUntil = now + CONFIG.RIFT_COOLDOWN; changed = true;
+        console.log(`[自动修复] 房间 ${room.code} 裂隙 ${r.id} BUSY 无桌，已重置`);
+      } else if (now - sm.startAt > CONFIG.SMALL_DURATION + 5000) {
+        endSmallBoard(room, sm);
+        addLog(room, '小棋盘超时，强制结束');
+        changed = true;
+      }
+    }
     if (!room.gameOver) {
       if (!room.collapse.started) { if (now - room.createdAt >= CONFIG.COLLAPSE_DELAY) { startCollapse(room, now); changed = true; } }
       else if (!room.collapse.done) { if (collapseTick(room, now)) changed = true; }
       for (const p of room.players.values()) {
-        if (!p.alive || room.small && (room.small.aId === p.id || room.small.bId === p.id)) continue;
+        if (!p.alive || isInAnySmall(room, p.id)) continue;
         if (room.tiles[p.y][p.x] === TILE.DANGER) {
           if (now - p.lastDangerDmg >= CONFIG.DANGER_DMG) { p.lastDangerDmg = now; damagePlayer(room, p, 1, '危险区侵蚀'); changed = true; }
         } else p.lastDangerDmg = 0;
       }
     }
-    if (room.small && smallTick(room, now)) changed = true;
+    if (room.smalls.size > 0 && smallTick(room, now)) changed = true;
     for (const p of room.players.values()) if (tryDisorientAutoMove(room, p, now)) changed = true;
     for (const p of room.players.values()) { if (p.alive) computeVisibility(room, p); else p.visible = new Set(); }
     if (!room.gameOver) {
@@ -1542,10 +1650,10 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   const nets = os.networkInterfaces(), ips = [];
   for (const name of Object.keys(nets)) for (const net of nets[name]) if (net.family === 'IPv4' && !net.internal) ips.push(net.address);
-  
+
   console.log('');
   console.log('========================================');
-  console.log('  裂隙棋盘 联机服务器（v10 预览版）');
+  console.log('  裂隙棋盘 联机服务器（v10.3 多桌并发版）');
   console.log('========================================');
   console.log('');
   console.log('  本机访问：http://localhost:' + PORT);
