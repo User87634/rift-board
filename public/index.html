@@ -1399,50 +1399,160 @@ function renderBigBoard() {
       else color = tileColor(t, 'explored');
 
       if (warnCell && warnCell.x === x && warnCell.y === y && warnRemain > 0 && info.visible) {
-        color = blinkOn ? '#ef4444' : '#fca5a5';
+        ctx.fillStyle = blinkOn ? 'rgba(239, 68, 68, 0.9)' : 'rgba(252, 165, 165, 0.9)';
+        ctx.fillRect(px + 1, py + 1, TS - 2, TS - 2);
+        // 画危险斜条纹
+        ctx.save();
+        ctx.beginPath(); ctx.rect(px, py, TS, TS); ctx.clip();
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 4;
+        for (let i = -TS; i < TS * 2; i += 12) {
+          ctx.beginPath();
+          ctx.moveTo(px + i, py);
+          ctx.lineTo(px + i - TS, py + TS);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
       ctx.fillStyle = color;
+      // 直接铺满整格，不留任何缝隙
       ctx.fillRect(px, py, TS, TS);
-      ctx.strokeStyle = isFog ? '#1e293b' : GRID_LINE;
+      
+      // 经典模式用 3% 透明度的黑线，迷雾模式用 3% 的白线（几乎隐形）
+      ctx.strokeStyle = isFog ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)';
+      ctx.lineWidth = 1;
       ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
 
       if (!info.explored) continue;
 
       if (t === TILE_OBSTACLE) {
-        ctx.fillStyle = info.visible ? '#94a3b8' : '#a8b3c2';
-        ctx.fillRect(px + TS * 0.18, py + TS * 0.18, TS * 0.64, TS * 0.64);
-        ctx.strokeStyle = info.visible ? '#7d8ba0' : '#b0bccd';
-        ctx.strokeRect(px + TS * 0.18, py + TS * 0.18, TS * 0.64, TS * 0.64);
+        // 立体石块：暗底 + 亮面高光
+        ctx.fillStyle = info.visible ? '#64748b' : '#94a3b8';
+        ctx.fillRect(px + TS * 0.15, py + TS * 0.15, TS * 0.7, TS * 0.7);
+        ctx.fillStyle = info.visible ? '#94a3b8' : '#cbd5e1';
+        ctx.fillRect(px + TS * 0.15, py + TS * 0.15, TS * 0.7, TS * 0.2);
+        ctx.strokeStyle = info.visible ? '#475569' : '#94a3b8';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(px + TS * 0.15, py + TS * 0.15, TS * 0.7, TS * 0.7);
+        ctx.lineWidth = 1;
       }
       if (t === TILE_RUIN) {
-        ctx.fillStyle = info.visible ? '#450a0a' : '#5f1111';
-        ctx.fillRect(px + TS * 0.15, py + TS * 0.15, TS * 0.7, TS * 0.7);
-        ctx.strokeStyle = info.visible ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.15)';
+        // 焦土废墟：底色加深，画裂纹而不是简单的大叉
+        ctx.fillStyle = info.visible ? '#2a0808' : '#5f1111';
+        ctx.fillRect(px + 1, py + 1, TS - 2, TS - 2);
+        ctx.strokeStyle = info.visible ? 'rgba(220, 38, 38, 0.4)' : 'rgba(255, 255, 255, 0.1)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(px + TS * 0.25, py + TS * 0.25); ctx.lineTo(px + TS * 0.75, py + TS * 0.75);
-        ctx.moveTo(px + TS * 0.75, py + TS * 0.25); ctx.lineTo(px + TS * 0.25, py + TS * 0.75);
+        ctx.moveTo(px + TS * 0.2, py + TS * 0.3); ctx.lineTo(px + TS * 0.5, py + TS * 0.6); ctx.lineTo(px + TS * 0.8, py + TS * 0.4);
+        ctx.moveTo(px + TS * 0.5, py + TS * 0.6); ctx.lineTo(px + TS * 0.4, py + TS * 0.85);
         ctx.stroke(); ctx.lineWidth = 1;
       }
       if (t === TILE_RESOURCE && info.visible) {
-        ctx.fillStyle = '#d97706'; ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.15, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
+        // 资源：带光晕的菱形宝石
+        const pulse = 0.8 + 0.2 * Math.sin(effNow / 300 + x + y);
+        ctx.fillStyle = `rgba(217, 119, 6, ${0.2 * pulse})`;
+        ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.35 * pulse, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f59e0b'; 
+        ctx.beginPath();
+        ctx.moveTo(px + TS / 2, py + TS * 0.25);
+        ctx.lineTo(px + TS * 0.75, py + TS / 2);
+        ctx.lineTo(px + TS / 2, py + TS * 0.75);
+        ctx.lineTo(px + TS * 0.25, py + TS / 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
       }
       if (t === TILE_TRANSPORT && info.visible) {
+        // 传送：旋转虚线圆
+        ctx.save();
+        ctx.translate(px + TS / 2, py + TS / 2);
+        ctx.rotate(effNow / 1000);
         ctx.strokeStyle = '#0891b2'; ctx.lineWidth = 2;
-        ctx.strokeRect(px + TS * 0.22, py + TS * 0.22, TS * 0.56, TS * 0.56); ctx.lineWidth = 1;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath(); ctx.arc(0, 0, TS * 0.28, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
       }
       if (t === TILE_RIFT) {
         const rift = myState.rifts.find(r => r.x === x && r.y === y);
         if (rift) {
-          ctx.strokeStyle = info.visible ? '#7c3aed' : '#a78bfa'; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.32, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+          const time = effNow / 1000;
+          const cx = px + TS / 2, cy = py + TS / 2;
+          const isVisible = info.visible;
+          const baseColor = isVisible ? '124, 58, 237' : '167, 139, 250'; // 紫罗兰色
+
+          // 1. 裂隙背景底纹（制造向中心塌缩的深邃感）
+          const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, TS * 0.45);
+          bgGrad.addColorStop(0, `rgba(${baseColor}, ${isVisible ? 0.25 : 0.1})`);
+          bgGrad.addColorStop(1, `rgba(${baseColor}, 0)`);
+          ctx.fillStyle = bgGrad;
+          ctx.beginPath(); ctx.arc(cx, cy, TS * 0.45, 0, Math.PI * 2); ctx.fill();
+
+          // 2. 多层星环旋转系统
+          ctx.save();
+          // 外环：缓慢顺时针旋转的虚线星轨
+          ctx.strokeStyle = `rgba(${baseColor}, 0.5)`;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 6]);
+          ctx.lineDashOffset = time * 15;
+          ctx.beginPath(); ctx.arc(cx, cy, TS * 0.38, 0, Math.PI * 2); ctx.stroke();
+          
+          // 中环：逆时针旋转的半透明光圈
+          ctx.strokeStyle = `rgba(${baseColor}, 0.7)`;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(cx, cy, TS * 0.30, -time * 1.5, -time * 1.5 + Math.PI * 1.5); ctx.stroke();
+
+          // 内环：快速顺时针旋转的亮色断弧
+          ctx.strokeStyle = isVisible ? '#c4b5fd' : '#ddd6fe';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(cx, cy, TS * 0.22, time * 2.5, time * 2.5 + Math.PI * 0.7); ctx.stroke();
+          ctx.restore();
+
+          // 3. 核心状态与粒子特效
           if (rift.state === 'WAITING' || rift.state === 'BUSY') {
-            ctx.fillStyle = '#7c3aed'; const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 200);
-            ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.13 * pulse, 0, Math.PI * 2); ctx.fill();
+            // 匹配中/对战中：高亮脉冲 + 汇聚的星尘
+            const pulse = 0.8 + 0.2 * Math.sin(time * 6);
+            const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, TS * 0.2 * pulse);
+            coreGrad.addColorStop(0, '#fff');
+            coreGrad.addColorStop(0.4, isVisible ? '#c4b5fd' : '#a78bfa');
+            coreGrad.addColorStop(1, 'rgba(124, 58, 237, 0)');
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath(); ctx.arc(cx, cy, TS * 0.2 * pulse, 0, Math.PI * 2); ctx.fill();
+            
+            // 向内螺旋汇聚的粒子
+            for (let i = 0; i < 5; i++) {
+              const pAngle = (time * 4 + i * Math.PI * 0.4) % (Math.PI * 2);
+              const pDist = TS * 0.4 * (1 - (time * 1.5 + i * 0.2) % 1);
+              const pAlpha = (time * 1.5 + i * 0.2) % 1; 
+              ctx.fillStyle = `rgba(255, 255, 255, ${pAlpha})`;
+              ctx.beginPath(); ctx.arc(cx + Math.cos(pAngle) * pDist, cy + Math.sin(pAngle) * pDist, TS * 0.035, 0, Math.PI * 2); ctx.fill();
+            }
           } else if (rift.state === 'COOLDOWN') {
-            ctx.fillStyle = 'rgba(120,120,120,0.5)';
-            ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.18, 0, Math.PI * 2); ctx.fill();
+            // 冷却中：灰暗的结晶体/死寂星核
+            ctx.fillStyle = 'rgba(100, 100, 120, 0.6)';
+            ctx.beginPath(); ctx.arc(cx, cy, TS * 0.15, 0, Math.PI * 2); ctx.fill();
+            
+            // 内部六边形裂纹
+            ctx.strokeStyle = 'rgba(50, 50, 60, 0.8)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const a = i * Math.PI / 3;
+              const nx = cx + Math.cos(a) * TS * 0.12;
+              const ny = cy + Math.sin(a) * TS * 0.12;
+              if (i === 0) ctx.moveTo(nx, ny); else ctx.lineTo(nx, ny);
+            }
+            ctx.closePath(); ctx.stroke();
+          } else {
+            // 空闲(OPEN)：深邃的暗物质核心 + 环绕的萤火
+            ctx.fillStyle = isVisible ? '#1e1b4b' : '#312e81';
+            ctx.beginPath(); ctx.arc(cx, cy, TS * 0.16, 0, Math.PI * 2); ctx.fill();
+            
+            ctx.fillStyle = isVisible ? '#c4b5fd' : '#a78bfa';
+            for (let i = 0; i < 3; i++) {
+              const a = time * 2 + i * Math.PI * 2 / 3;
+              const r = TS * 0.14;
+              ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, TS * 0.025, 0, Math.PI * 2); ctx.fill();
+            }
           }
         }
       }
@@ -1533,22 +1643,36 @@ function renderBigBoard() {
     const px = (vp.x - view.vx) * TS + TS / 2, py = (vp.y - view.vy) * TS + TS / 2;
     const pawnR = TS * 0.34;
     
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.arc(px + 1, py + 2, pawnR, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.fill();
+    // 悬浮阴影
+    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(px, py + pawnR * 0.8, pawnR * 0.8, pawnR * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    
+    // 果冻渐变主体
+    const grad = ctx.createRadialGradient(px - pawnR * 0.3, py - pawnR * 0.3, pawnR * 0.1, px, py, pawnR);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.2, p.color);
+    grad.addColorStop(1, hexToRgba(p.color, 0.8));
+    ctx.fillStyle = grad; 
+    ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.fill();
 
     if (p.isAI) {
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.arc(px, py, pawnR + 1, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(px, py, pawnR + 2, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
     }
 
     const firstChar = Array.from(p.name)[0] || '?';
     ctx.fillStyle = '#fff'; ctx.font = 'bold ' + Math.floor(TS * 0.38) + 'px system-ui';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(firstChar, px, py + 1); ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 4;
+    ctx.fillText(firstChar, px, py + 1); ctx.textBaseline = 'alphabetic'; ctx.shadowBlur = 0;
 
     if (p.isMe) {
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(px, py, pawnR, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, py, TS * 0.40, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+      // 呼吸旋转虚线光环
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(effNow / 300)})`;
+      ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]);
+      ctx.lineDashOffset = -effNow / 40;
+      ctx.beginPath(); ctx.arc(px, py, pawnR + 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
     }
     if ((p.winStreak || 0) >= 2) {
       ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(px, py, TS * 0.46, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
@@ -1657,8 +1781,13 @@ function renderSmallBoard() {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const px = offX + x * TS, py = offY + y * TS;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'; ctx.fillRect(px, py, TS, TS);
-      ctx.strokeStyle = 'rgba(165, 180, 252, 0.15)'; ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)'; 
+      ctx.fillRect(px, py, TS, TS);
+      
+      // 透明度极低，仅保留微弱的星空星图感
+      ctx.strokeStyle = 'rgba(165, 180, 252, 0.04)'; 
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, TS - 1, TS - 1);
     }
   }
 
@@ -1675,10 +1804,20 @@ function renderSmallBoard() {
     const px = offX + cp.x * TS, py = offY + cp.y * TS;
     const block = sm.blockedCp.find(bc => bc.cp.x === cp.x && bc.cp.y === cp.y && bc.until > sm.turnCount);
     const ownerColor = cp.owner === 'a' ? '#2563eb' : cp.owner === 'b' ? '#dc2626' : '#6b7280';
+    
+    // 动态背景底色
     if (cp.owner === 'a') ctx.fillStyle = 'rgba(37,99,235,0.15)';
     else if (cp.owner === 'b') ctx.fillStyle = 'rgba(220,38,38,0.15)';
-    else ctx.fillStyle = 'rgba(156,163,175,0.1)';
+    else ctx.fillStyle = 'rgba(156,163,175,0.08)';
     ctx.fillRect(px, py, TS, TS);
+    
+    // 同心圆涟漪
+    const time = effNow / 1000;
+    const ripple = (Math.sin(time * 2 + cp.x + cp.y) + 1) / 2;
+    ctx.strokeStyle = hexToRgba(ownerColor, 0.3 + ripple * 0.3); 
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.25 + ripple * 5, 0, Math.PI * 2); ctx.stroke();
+    
     ctx.strokeStyle = ownerColor; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(px + TS / 2, py + TS / 2, TS * 0.25, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
     if (block) {
