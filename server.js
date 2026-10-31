@@ -269,7 +269,7 @@ const CONFIG = {
   SMALL_SCORE_WIN: 10, SMALL_ITEM_CAP: 2, SMALL_OBSERVE: 6000, FATIGUE_EXTRA: 1000,
   FINAL_PHASE_STANDABLE: 4, MAX_LOGS: 50, VIEW: 2, VIEW_BUFF: 3,
   SCAN_RADIUS: 5, SCAN_DURATION: 10000, DECOY_RADIUS: 7, DECOY_DURATION: 5000,
-  VISION_BUFF_DURATION: 120000, AI_TICK: 250, DISORIENT_DURATION: 15000,
+  VISION_BUFF_DURATION: 120000, AI_TICK: 500, DISORIENT_DURATION: 15000,
   PURIFY_IMMUNE_DURATION: 45000
 };
 
@@ -853,6 +853,7 @@ function endSmallBoard(room, sm) {
     if (!p) continue;
     const safe = findSafeCell(room); if (safe) { p.x = safe.x; p.y = safe.y; }
     p.nextActionAt = Date.now() + 5000;
+    p.forceUpdateVision = true; // ★ 强制刷新视野
   }
   const rift = room.rifts.find(r => r.id === sm.riftId);
   if (rift) { rift.state = 'COOLDOWN'; rift.cooldownUntil = Date.now() + CONFIG.RIFT_COOLDOWN; }
@@ -905,7 +906,10 @@ function applyPunishment(room, loser, diff, winner) {
 function applyBlessing(room, player, blessingId) {
   const now = Date.now();
   if (blessingId === 'swift') { if (!player.relic) player.relic = pick(SMALL_ITEM_TYPES); else if (player.items.length < CONFIG.ITEM_CAP) player.items.push(pick(ITEM_IDS)); }
-  else if (blessingId === 'vision') player.visionBuffUntil = now + CONFIG.VISION_BUFF_DURATION;
+  else if (blessingId === 'vision') { // ★ 加上了大括号
+    player.visionBuffUntil = now + CONFIG.VISION_BUFF_DURATION;
+    player.forceUpdateVision = true; // ★ 强制刷新视野
+  }
   else if (blessingId === 'shield') player.shields = (player.shields || 0) + 2;
   else if (blessingId === 'harvest') player.harvestBuff = true;
   else if (blessingId === 'rift') player.riftRushBuff = true;
@@ -1435,7 +1439,7 @@ io.on('connection', socket => {
       applyTileEffectOnMove(room, player, now); player.nextActionAt = now + CONFIG.ACTION_CD;
       computeVisibility(room, player); broadcastState(room); return cb && cb({ ok: true });
     }
-    if (itemId === 'item_2') { player.items.splice(itemIdx, 1); bumpUse(); player.scanUntil = now + CONFIG.SCAN_DURATION; player.nextActionAt = now + CONFIG.ACTION_CD; computeVisibility(room, player); addLog(room, player.name + ' 使用扫描仪'); broadcastState(room); return cb && cb({ ok: true }); }
+    if (itemId === 'item_2') { player.items.splice(itemIdx, 1); bumpUse(); player.scanUntil = now + CONFIG.SCAN_DURATION; player.nextActionAt = now + CONFIG.ACTION_CD; player.forceUpdateVision = true; computeVisibility(room, player); addLog(room, player.name + ' 使用扫描仪'); broadcastState(room); return cb && cb({ ok: true }); }
     if (itemId === 'item_3') { player.items.splice(itemIdx, 1); bumpUse(); player.shields = (player.shields || 0) + 1; player.nextActionAt = now + CONFIG.ACTION_CD; broadcastState(room); return cb && cb({ ok: true }); }
     if (itemId === 'item_4') {
       if (!target || Math.abs(target.x - player.x) + Math.abs(target.y - player.y) !== 1 || !isValidRoadblockTarget(room, target.x, target.y)) return cb && cb({ ok: false, error: '不可放置' });
@@ -1599,7 +1603,17 @@ setInterval(() => {
     }
     if (room.smalls.size > 0 && smallTick(room, now)) changed = true;
     for (const p of room.players.values()) if (tryDisorientAutoMove(room, p, now)) changed = true;
-    for (const p of room.players.values()) { if (p.alive) computeVisibility(room, p); else p.visible = new Set(); }
+    // 在玩家对象里加个记录上一次坐标的属性，比如 p.lastVisibleX, p.lastVisibleY
+    for (const p of room.players.values()) { 
+      if (!p.alive) { p.visible = new Set(); continue; }
+      // 只有坐标变了，或者用道具强制要求更新时才计算
+      if (p.x !== p.lastVisibleX || p.y !== p.lastVisibleY || p.forceUpdateVision) {
+        computeVisibility(room, p);
+        p.lastVisibleX = p.x;
+        p.lastVisibleY = p.y;
+        p.forceUpdateVision = false;
+      }
+    }
     if (!room.gameOver) {
       if (checkFinalPhase(room)) changed = true;
       if (!room.gameOver) {
@@ -1612,7 +1626,7 @@ setInterval(() => {
     }
     if (changed) broadcastState(room);
   }
-}, 100);
+}, 200);
 
 setInterval(() => {
   const now = Date.now();
