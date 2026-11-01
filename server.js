@@ -294,6 +294,14 @@ const BLESSINGS = [
 ];
 
 const rooms = new Map();
+// ★ 新增：实时侦测服务器事件循环阻塞（Lag）
+let currentServerLag = 0;
+let expectedTime = Date.now() + 200;
+setInterval(() => {
+  const now = Date.now();
+  currentServerLag = Math.max(0, now - expectedTime); // 超出预期的时间就是卡顿时长
+  expectedTime = now + 200;
+}, 200);
 
 function genRoomCode() { const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; for (let t = 0; t < 100; t++) { let code = ''; for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)]; if (!rooms.has(code)) return code; } return null; }
 function ring(x, y, s) { return Math.min(x, y, s - 1 - x, s - 1 - y); }
@@ -1354,8 +1362,12 @@ io.on('connection', socket => {
   socket.emit('rooms_list', getRoomList());
 
   socket.on('list_rooms', (data, cb) => { if (cb) cb(getRoomList()); else socket.emit('rooms_list', getRoomList()); });
-  socket.on('ping_latency', (cb) => { if (cb) cb(); });
-
+  socket.on('ping_latency', (cb) => { 
+    if (cb) {
+      // 返回服务器当前的繁忙延迟
+      cb({ serverLag: currentServerLag }); 
+    }
+  });
   socket.on('create_room', (data, cb) => {
     const room = createRoom(data && data.mode === 'FOG' ? 'FOG' : 'CLASSIC');
     if (!room) return cb && cb({ ok: false, error: '房间创建失败' });

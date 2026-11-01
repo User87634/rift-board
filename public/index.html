@@ -537,7 +537,11 @@
         <!-- 移动后的日志面板 -->
         <div id="logPanel">
           <h3 style="display:flex; justify-content:space-between; align-items:center;">
-            日志 <span id="pingLabel" style="font-size:11px;color:#94a3b8;font-weight:normal;display:flex;align-items:center;gap:4px;"><span id="pingDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#16a34a;"></span>-- ms</span>
+          日志 <span style="font-size:11px;color:#94a3b8;font-weight:normal;display:flex;align-items:center;gap:6px;">
+  <span id="pingLabel">-- ms</span>
+  <span id="serverLagLabel" style="color:#eab308;">负载 -- ms</span>
+  <span id="fpsLabel" style="color:#3b82f6;">-- FPS</span>
+</span>
           </h3>
           <div id="logList"></div>
         </div>
@@ -579,12 +583,24 @@ function estimateServerNow() { return Date.now() + (serverOffset || 0); }
 setInterval(() => {
   if (!socket.connected) return;
   const sent = Date.now();
-  socket.emit('ping_latency', () => {
-    currentPing = Date.now() - sent;
-    const el = document.getElementById('pingLabel');
-    const dot = document.getElementById('pingDot');
-    if (el && dot) {
-      el.innerHTML = `<span id="pingDot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${currentPing < 80 ? '#16a34a' : currentPing < 200 ? '#eab308' : '#dc2626'};"></span>${currentPing} ms`;
+  socket.emit('ping_latency', (res) => {
+    const totalTime = Date.now() - sent;
+    // 从服务器返回的数据中提取服务器自己的卡顿时间
+    const serverLag = res && res.serverLag ? Math.round(res.serverLag) : 0;
+    
+    // 纯网络传输时间 = 总耗时 - 服务器排队时间
+    const netTime = Math.max(0, totalTime - serverLag);
+
+    const pingEl = document.getElementById('pingLabel');
+    const lagEl = document.getElementById('serverLagLabel');
+    
+    if (pingEl && lagEl) {
+      // 更新网络延迟（绿/黄/红）
+      pingEl.innerHTML = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${netTime < 80 ? '#16a34a' : netTime < 200 ? '#eab308' : '#dc2626'};"></span> 网络 ${netTime}ms`;
+      
+      // 更新服务器负载（绿/黄/红）
+      lagEl.textContent = `负载 ${serverLag}ms`;
+      lagEl.style.color = serverLag < 50 ? '#16a34a' : serverLag < 200 ? '#eab308' : '#dc2626';
     }
   });
 }, 2000);
@@ -2303,12 +2319,32 @@ function tickCooldown() {
 setInterval(tickCooldown, 50);
 
 let lastRenderTime = 0;
+let fpsCount = 0;
+let fpsLastUpdate = performance.now();
+
 function loopRender(time) {
   // ★ 限制每秒最多渲染 30 次（约 33ms 一次）
   if (time - lastRenderTime >= 33) {
-    if (myState) render();
+    if (myState) {
+      render();
+      fpsCount++; // 每真实渲染一帧，计数器加 1
+    }
     lastRenderTime = time;
   }
+  
+  // ★ 每过 1 秒，更新一次 FPS 显示
+  if (time - fpsLastUpdate >= 1000) {
+    const fpsEl = document.getElementById('fpsLabel');
+    if (fpsEl && myState) {
+      const realFps = Math.round((fpsCount * 1000) / (time - fpsLastUpdate));
+      fpsEl.textContent = `${realFps} FPS`;
+      // 30帧是满血绿色，掉到20帧以下变红警告
+      fpsEl.style.color = realFps >= 28 ? '#16a34a' : realFps >= 20 ? '#eab308' : '#dc2626';
+    }
+    fpsCount = 0;
+    fpsLastUpdate = time;
+  }
+  
   requestAnimationFrame(loopRender);
 }
 requestAnimationFrame(loopRender);
