@@ -14,37 +14,134 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;background:#f0f4f8;color:#1e293b;font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;min-height:100vh;overflow-x:hidden}
   
-  /* ================= 大厅动态背景 ================= */
+  /* ================= 大厅：天地清浊 + 流体聚散 ================= */
   #bg-anim{position:fixed;inset:0;z-index:-1;overflow:hidden;background:#f0f4f8}
-  .orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:0.45;pointer-events:none;}
   
+  .orb{
+    position:absolute;
+    border-radius: 50%;
+    filter: blur(70px); 
+    pointer-events: none;
+  }
+  
+  /* 🌤️ 天（清轻）：稳重呼吸 */
   .orb1{
-    width:400px;height:400px;background:#bfdbfe;top:-10%;left:-10%;
-    animation: float1 10s infinite alternate ease-in-out;
+    width: 160vw; height: 50vh; background: #e0f2fe; opacity: 0.6;
+    top: -20vh; left: -30vw; animation: slowSky 35s infinite alternate ease-in-out;
   }
+  
+  /* 🪨 地（浊重）：稳重呼吸 */
   .orb2{
-    width:350px;height:350px;background:#ddd6fe;bottom:10%;right:-5%;
-    animation: float2 14s infinite alternate ease-in-out;
+    width: 160vw; height: 55vh; background: #a78bfa; opacity: 0.45;
+    bottom: -25vh; left: -30vw; animation: slowGround 40s infinite alternate ease-in-out;
   }
-  .orb3{
-    width:300px;height:300px;background:#fbcfe8;top:40%;left:30%;
-    animation: float3 18s infinite alternate ease-in-out;
+  
+  /* 🌸 迷雾组 (粉)：宽度放大，让它们可以游走更远 */
+  .orb3 { width: 40vw; height: 25vh; background: #fbcfe8; top: 35%; left: 20vw; opacity: 0.6; animation: wander1 16s infinite alternate ease-in-out; }
+  .orb4 { width: 45vw; height: 20vh; background: #fbcfe8; top: 45%; right: 15vw; opacity: 0.5; animation: wander2 19s infinite alternate ease-in-out; }
+
+  /* 💭 梦境组 (青)：与粉色交错 */
+  .orb5 { width: 45vw; height: 22vh; background: #cffafe; top: 40%; left: 30vw; opacity: 0.5; animation: wander3 14s infinite alternate ease-in-out; }
+  .orb6 { width: 35vw; height: 28vh; background: #cffafe; top: 50%; right: 25vw; opacity: 0.4; animation: wander4 21s infinite alternate ease-in-out; }
+
+  /* --- 天的呼吸 --- */
+  @keyframes slowSky {
+    0% { transform: translateY(0) scale(1); }
+    100% { transform: translateY(4vh) scale(1.1); }
+  }
+  /* --- 地的呼吸 --- */
+  @keyframes slowGround {
+    0% { transform: translateY(0) scale(1.05); }
+    100% { transform: translateY(-3vh) scale(0.95); }
   }
 
-  /* 分别为三个光球写不同的运动轨迹，产生错落感 */
-  @keyframes float1 {
-    0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(150px, 100px) scale(1.2); }
+  /* --- 核心：流体聚散轨迹 --- */
+  /* 轨迹设计逻辑：在不同的百分比，让它们互相靠近（融合）或者远离（分裂）。
+     同时，在 20% 或 80% 时，Y轴瞬间拉大，实现概率性的“上下越界”。 */
+
+  @keyframes wander1 {
+    0%   { transform: translate(0, 0) scale(1); }
+    25%  { transform: translate(15vw, 10vh) scale(1.2); } /* 向下微沉 */
+    50%  { transform: translate(30vw, -5vh) scale(0.8); } /* 向右上冲刺 */
+    75%  { transform: translate(10vw, -15vh) scale(1.1); } /* 向上越界，触碰天 */
+    100% { transform: translate(-10vw, 5vh) scale(1); }
   }
-  @keyframes float2 {
-    0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(-120px, -150px) scale(0.8); }
+
+  @keyframes wander2 {
+    0%   { transform: translate(0, 0) scale(1.1); }
+    25%  { transform: translate(-20vw, -10vh) scale(0.8); } /* 向左上躲避 */
+    50%  { transform: translate(-35vw, 5vh) scale(1.3); } /* 向左下聚拢 */
+    75%  { transform: translate(-15vw, 15vh) scale(0.9); } /* 向下越界，触碰地 */
+    100% { transform: translate(10vw, -5vh) scale(1.1); }
   }
-  @keyframes float3 {
-    0% { transform: translate(0, 0) scale(0.9); }
-    100% { transform: translate(50px, -100px) scale(1.3); }
+
+  @keyframes wander3 {
+    0%   { transform: translate(0, 0) scale(0.9); }
+    33%  { transform: translate(-15vw, 15vh) scale(1.2); } /* 与粉团交汇 */
+    66%  { transform: translate(20vw, -10vh) scale(0.9); }
+    100% { transform: translate(-5vw, 20vh) scale(1.1); } /* 向下越界 */
   }
-  @keyframes float{0%{transform:translate(0,0)}100%{transform:translate(40px,50px)}}
+
+  @keyframes wander4 {
+    0%   { transform: translate(0, 0) scale(1); }
+    33%  { transform: translate(25vw, -15vh) scale(0.8); } 
+    66%  { transform: translate(-25vw, 10vh) scale(1.3); } /* 与粉团交汇融合 */
+    100% { transform: translate(5vw, -20vh) scale(0.9); } /* 向上越界 */
+  }
+
+  /* ================= ★ 天地星尘系统 ================= */
+  #stars-box {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10; 
+  }
+  
+  /* 外层容器：负责移动轨迹与整体消失 */
+  .star-container {
+    position: absolute;
+    /* 动画时长和延迟由 JS 动态注入 */
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  /* 内层光点：负责发光和呼吸闪烁 */
+  .star-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    animation: twinkle ease-in-out infinite alternate;
+  }
+
+  /* --- 天的落星：从上往下，到达随机终点后消失 --- */
+  @keyframes fallDown {
+    0% { transform: translateY(0); opacity: 0; }
+    10% { opacity: 1; } /* 出现 */
+    85% { opacity: 1; } /* 保持 */
+    100% { transform: translateY(var(--end-y)); opacity: 0; } /* 触碰大地消失 */
+  }
+
+  /* --- 地的萤火：从下往上，到达随机终点后消失 --- */
+  @keyframes floatUp {
+    0% { transform: translateY(0); opacity: 0; }
+    10% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { transform: translateY(var(--end-y)); opacity: 0; } /* 融入天空消失 */
+  }
+
+  /* 呼吸闪烁 */
+  @keyframes twinkle {
+    0% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.3); }
+    100% { opacity: 0.3; transform: scale(0.9); }
+  }
+
+  /* 保留原有的闪烁效果 */
+  @keyframes twinkle {
+    0% { opacity: 0.2; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.5); }
+    100% { opacity: 0.2; transform: scale(0.9); }
+  }
 
   /* ================= 大厅布局 ================= */
   .page{width:100%;max-width:1400px;padding:16px;position:relative;z-index:1}
@@ -377,20 +474,13 @@
     .mode-btn{padding:10px 8px;font-size:12px}
     .mode-btn .mode-name{font-size:13px}.mode-btn .mode-desc{font-size:10px}
       @media(max-width: 600px){
-    /* ... 原有的那些代码 ... */
-    
-    /* ★ 手机端光晕专属修整 */
-    .orb1 { width: 250px; height: 250px; }
-    .orb2 { width: 200px; height: 200px; }
-    
-    /* 强行把粉色光晕拽回左下角，并且缩小 */
-    .orb3 { 
-      width: 220px; 
-      height: 220px; 
-      top: auto; 
-      bottom: -10%; 
-      left: -15%; 
-    }
+    /* ★ 手机端流体适配 */
+    .orb1 { width: 200vw; height: 25vh; top: -10vh; left: -50vw; }
+    .orb2 { width: 200vw; height: 30vh; bottom: -12vh; left: -50vw; }
+    .orb3 { width: 70vw; height: 20vh; top: 35%; left: 10vw; }
+    .orb4 { width: 65vw; height: 22vh; top: 45%; right: 10vw; }
+    .orb5 { width: 75vw; height: 18vh; top: 40%; left: 15vw; }
+    .orb6 { width: 60vw; height: 24vh; top: 50%; right: 15vw; }
   }
   }
   
@@ -412,7 +502,16 @@
 </head>
 <body>
 <div id="bg-anim">
-  <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+  <!-- 天与地 -->
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <!-- 交织的迷雾与梦境（4团） -->
+  <div class="orb orb3"></div>
+  <div class="orb orb4"></div>
+  <div class="orb orb5"></div>
+  <div class="orb orb6"></div>
+  <!-- 星尘层 -->
+  <div id="stars-box"></div>
 </div>
 <div class="page">
   <div id="lobby">
@@ -590,7 +689,80 @@
 </div>
 
 <script>
+// ★ 生成天地星尘（上降冷光，上升暖萤，随机深度消失）
+(function createStars() {
+  const box = document.getElementById('stars-box');
+  if (!box) return;
+  
+  // 1. 天的落星（冷色）
+  for (let i = 0; i < 25; i++) {
+    const container = document.createElement('div');
+    container.className = 'star-container';
+    
+    // 初始在屏幕上方
+    container.style.top = `${Math.random() * -10 - 5}vh`; 
+    container.style.left = `${Math.random() * 100}vw`;
+    
+    // 随机下落深度：50vh - 110vh（落进大地）
+    const endY = Math.random() * 60 + 50;
+    container.style.setProperty('--end-y', `${endY}vh`);
+    
+    // 随机时长 10-25 秒
+    const dur = Math.random() * 15 + 10;
+    container.style.animationName = 'fallDown';
+    container.style.animationDuration = `${dur}s`;
+    container.style.animationDelay = `${Math.random() * -20}s`;
+    
+    // 内层光点
+    const inner = document.createElement('div');
+    inner.className = 'star-inner';
+    const size = Math.random() * 3 + 2;
+    inner.style.width = `${size}px`;
+    inner.style.height = `${size}px`;
+    inner.style.background = Math.random() > 0.5 ? '#ffffff' : '#e0f2fe';
+    inner.style.boxShadow = '0 0 10px 2px rgba(255,255,255,0.8), 0 0 15px 4px rgba(125,211,252,0.6)';
+    inner.style.animationDuration = `${Math.random() * 2 + 2}s`;
+    
+    container.appendChild(inner);
+    box.appendChild(container);
+  }
+
+  // 2. 地的浮萤（暖色）
+  for (let i = 0; i < 25; i++) {
+    const container = document.createElement('div');
+    container.className = 'star-container';
+    
+    // 初始在屏幕下方
+    container.style.top = `${Math.random() * 10 + 100}vh`; 
+    container.style.left = `${Math.random() * 100}vw`;
+    
+    // 随机上升深度：-10vh 到 -60vh（升入天空）
+    const endY = -(Math.random() * 50 + 10);
+    container.style.setProperty('--end-y', `${endY}vh`);
+    
+    const dur = Math.random() * 15 + 10;
+    container.style.animationName = 'floatUp';
+    container.style.animationDuration = `${dur}s`;
+    container.style.animationDelay = `${Math.random() * -20}s`;
+    
+    // 内层光点
+    const inner = document.createElement('div');
+    inner.className = 'star-inner';
+    const size = Math.random() * 4 + 3;
+    inner.style.width = `${size}px`;
+    inner.style.height = `${size}px`;
+    const colors = ['#fbbf24', '#c084fc', '#f472b6'];
+    inner.style.background = colors[Math.floor(Math.random() * colors.length)];
+    inner.style.boxShadow = '0 0 10px 2px rgba(255,215,0,0.7), 0 0 15px 5px rgba(167,139,250,0.6)';
+    inner.style.animationDuration = `${Math.random() * 2 + 2}s`;
+    
+    container.appendChild(inner);
+    box.appendChild(container);
+  }
+})();
+
 const socket = io();
+
 // ★ 新增：时间同步与延迟测量
 let serverOffset = null;
 let currentPing = 0;
