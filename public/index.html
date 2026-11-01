@@ -376,6 +376,22 @@
     #lobby h1{font-size:26px}#lobby .sub{font-size:12px;margin-bottom:20px}
     .mode-btn{padding:10px 8px;font-size:12px}
     .mode-btn .mode-name{font-size:13px}.mode-btn .mode-desc{font-size:10px}
+      @media(max-width: 600px){
+    /* ... 原有的那些代码 ... */
+    
+    /* ★ 手机端光晕专属修整 */
+    .orb1 { width: 250px; height: 250px; }
+    .orb2 { width: 200px; height: 200px; }
+    
+    /* 强行把粉色光晕拽回左下角，并且缩小 */
+    .orb3 { 
+      width: 220px; 
+      height: 220px; 
+      top: auto; 
+      bottom: -10%; 
+      left: -15%; 
+    }
+  }
   }
   
   /* ===== 手机端结算界面专属修复 ===== */
