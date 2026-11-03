@@ -135,7 +135,12 @@
     50% { opacity: 1; transform: scale(1.3); }
     100% { opacity: 0.3; transform: scale(0.9); }
   }
-
+  /* ★ 新增：昼夜背景遮罩（仅遮挡背景，不影响控件） */
+  #night-overlay {
+    position: fixed; inset: 0; background: #0b0f19;
+    opacity: 0; pointer-events: none; /* 关键：不拦截鼠标点击 */
+    transition: opacity 2s linear; z-index: 0; /* 保证在背景层之上，大厅UI之下 */
+  }
   /* ================= 大厅布局 ================= */
   .page{width:100%;max-width:1400px;padding:16px;position:relative;z-index:1}
   #lobby{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:90vh}
@@ -506,6 +511,7 @@
   <!-- 星尘层 -->
   <div id="stars-box"></div>
 </div>
+<div id="night-overlay"></div>
 <div class="page">
   <div id="lobby">
     <div class="header-box">
@@ -866,6 +872,84 @@ function initAudio() {
     audioMaster.connect(audioCtx.destination);
   }
 }
+// ★ 新增：极光环境音 BGM
+let bgmInterval = null;
+function startBGM() {
+  if (!audioCtx || bgmInterval) return;
+  const bgmGain = audioCtx.createGain();
+  bgmGain.gain.value = 0.0;
+  
+  const bgmDelay = audioCtx.createDelay(4.0);
+  bgmDelay.delayTime.value = 1.5;
+  const bgmFeedback = audioCtx.createGain();
+  bgmFeedback.gain.value = 0.6;
+  
+  bgmDelay.connect(bgmFeedback);
+  bgmFeedback.connect(bgmDelay);
+  bgmDelay.connect(bgmGain);
+  bgmGain.connect(audioMaster);
+  bgmGain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 5);
+  
+  const rootOsc = audioCtx.createOscillator();
+  const rootGain = audioCtx.createGain();
+  rootOsc.type = 'sine';
+  rootOsc.frequency.value = 65.41; // C2
+  rootOsc.detune.value = -5;
+  rootGain.gain.value = 1.0;
+  rootOsc.connect(rootGain);
+  rootGain.connect(bgmGain);
+  rootOsc.start();
+  
+  const scale = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33];
+  bgmInterval = setInterval(() => {
+    if (!audioCtx || audioCtx.state !== 'running' || muted) return;
+    const now = audioCtx.currentTime;
+    if (Math.random() < 0.4) {
+      [scale[0], scale[2], scale[4]].forEach(freq => {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.value = freq * 2;
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.05, now + 3);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 6);
+        osc.connect(g); g.connect(bgmGain);
+        osc.start(now); osc.stop(now + 6);
+      });
+    }
+    if (Math.random() < 0.6) {
+      const freq = scale[Math.floor(Math.random() * scale.length)] * 4;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.03, now + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 2);
+      osc.connect(g); g.connect(bgmGain);
+      osc.start(now); osc.stop(now + 2);
+    }
+  }, 3000);
+}
+
+// ★ 新增：昼夜更替系统（各 12 分钟）
+setInterval(() => {
+  const cycle = 1440; // 24分钟总周期(24 * 60秒)
+  const phase = (Date.now() / 1000) % cycle;
+  let opacity = 0;
+  
+  // 计算不同阶段的透明度（0-720秒白天，720-1440秒黑夜）
+  if (phase < 60) {
+    opacity = 0.6 - (phase / 60) * 0.6; // 黎明破晓 0~60s
+  } else if (phase < 720) {
+    opacity = 0; // 完整白天 1~12 分钟
+  } else if (phase < 780) {
+    opacity = ((phase - 720) / 60) * 0.6; // 黄昏渐暗 12~13 分钟
+  } else {
+    opacity = 0.6; // 完整黑夜 13~24 分钟
+  }
+  
+  const el = document.getElementById('night-overlay');
+  if (el) el.style.opacity = opacity;
+}, 1000);
 
 // ★ 55 个音效定义表（style: 'dry' 清晰 | 'lightDream' 轻迷雾轻梦境 | 'fogDream' 重迷雾重梦境）
 // throttle：同音效最小间隔（ms）
@@ -1196,6 +1280,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 
 document.getElementById('createBtn').onclick = () => {
   initAudio();
+  startBGM(); // ★ 触发 BGM
   errorMsg.textContent = '';
   const name = document.getElementById('nameInput').value.trim();
   socket.emit('create_room', { name, mode: selectedMode }, res => {
@@ -1226,8 +1311,9 @@ function onJoined(res) {
   gamePage.style.display = 'block';
   document.getElementById('roomCode').textContent = res.code;
   
-  // ★ 核心：进入游戏，直接隐藏背景特效层，释放所有性能！
+  // ★ 核心：进入游戏，隐藏大厅背景和昼夜遮罩
   document.getElementById('bg-anim').style.display = 'none';
+  document.getElementById('night-overlay').style.display = 'none';
 }
 
 
